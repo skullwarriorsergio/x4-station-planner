@@ -242,7 +242,7 @@
     <div class="station-sub">X4 9.00 data · adjust module counts on any station and the chain demand recomputes live.</div>
   </div>
   <div class="toolbar">
-    <label class="station-sub" title="Nopileos Kingpin mod: Nopileos' Fortune II + VI get 250 % sun and extra resources, so stations move there">
+    <label class="station-sub" title="Nopileos Kingpin mod: Nopileos' Fortune II gets 250 % sun and every raw resource, so S1–S4 and S6 move there">
       <input type="checkbox" id="kp-toggle" onchange="setProfile(this.checked ? 'kingpin' : 'vanilla')"> Nopileos Kingpin mod
     </label>
     <label class="station-sub">View
@@ -276,7 +276,7 @@
   Recipes and average prices come from the X4 9.00 <code>wares.xml</code> (base + DLC), checked 2026-11-08. Per-hour rate =
   <code>(output / cycle) × 3600 × module count</code>. Solar modules are also multiplied by sunlight; production modules are not.
   Both solar types make the same Energy Cells ware, so each station has one EC balance.
-  The <b>Nopileos Kingpin mod</b> switch picks the sectors: off = the Ore Belt hub and other vanilla sectors with their real sunlight; on = Nopileos' Fortune II + VI at the mod's 250 % sun. Each station's location menu offers 2–3 options, ranked by the mining fields in and next to the sector, sunlight, jumps to its supplier stations and jumps to the nearest Xenon / Kha'ak sector (9.00 gate network). Picking one sets the sunlight and the solar module count.
+  The <b>Nopileos Kingpin mod</b> switch picks the sectors: off = the Ore Belt hub and other vanilla sectors with their real sunlight; on = S1–S4 and S6 in Nopileos' Fortune II at the mod's 250 % sun (one sector, long local highway, no gate crossings). Each station's location menu offers 2–3 options, ranked by the mining fields in and next to the sector, sunlight, jumps to its supplier stations and jumps to the nearest Xenon / Kha'ak sector (9.00 gate network). Picking one sets the sunlight and the solar module count.
   Processor modules (Scrapworks, Kha'ak Scrap Processor) handle 150 units per 60 s at full rate. Like in the game, they only run as fast as the modules on the same station use their output (the % shown).
   The Kha'ak processor rate is assumed to equal the Scrapworks rate; check the module's "products per hour" in game.
   Allographyne substitution: <code>ceil(missing quantity × ware average price / 1,400)</code> (community-reported rule, matches the 9.00 prices). It is only used when wares are missing, and only from the building station's own storage.
@@ -493,24 +493,23 @@ const LOCATIONS = {
   "Silent Witness XI":   { sun: 1.18, res: "Nividium (2 huge fields, low, very fast); Ore very high; Silicon high", near: "Raw Kha'ak scrap next door (Silent Witness XII); more Nividium in Silent Witness I", risk: "Hatikvah freeport; borders the Kha'ak hive in XII" },
   "Circle of Deceit":    { sun: 1.42, res: "Raw Kha'ak scrap (low); Helium + Methane high; Raw Scrap medium", near: "2 jumps from Ore Belt", risk: "Borders Sanctum Verge (2 Kha'ak hives)" },
   "Hewa's Twin V":       { sun: 0.82, res: "Raw Scrap very high; Ore + Silicon high", near: "Teladi space", risk: "Safest scrap site: 5 jumps from Xenon / Kha'ak; low sun" },
-  "Nopileos' Fortune II": { sun: 2.5, kingpin: true, res: "Ore + Hydrogen very high, Ice high, Nividium low; the mod adds Silicon, Helium, Methane", near: "Nopileos' Fortune VI next door", risk: "3 jumps from Xenon / Kha'ak" },
-  "Nopileos' Fortune VI": { sun: 2.5, kingpin: true, res: "No mining fields", near: "Next to Nopileos' Fortune II", risk: "2 jumps from Xenon / Kha'ak" },
+  "Nopileos' Fortune II": { sun: 2.5, kingpin: true, res: "Ore + Hydrogen very high, Ice high, Nividium low; the mod adds Silicon, Helium, Methane", near: "Big sector with a long local highway: the whole chain in one sector, no trader crosses a gate", risk: "3 jumps from Xenon / Kha'ak; keeps traders away from the two Nopileos' Fortune VI gates" },
 };
 // 2-3 options per station, best first. Kingpin-only sectors are offered only with the Kingpin switch on.
 const STATION_OPTIONS = {
   S1: ["Nopileos' Fortune II", "Ore Belt", "Frontier Edge", "Adventure's Promise"],
   S2: ["Nopileos' Fortune II", "Ore Belt", "Adventure's Promise", "Frontier Edge"],
-  S3: ["Nopileos' Fortune VI", "Ore Belt", "Third Redemption", "Frontier Edge"],
-  S4: ["Nopileos' Fortune VI", "Ore Belt", "Third Redemption", "Frontier Edge"],
+  S3: ["Nopileos' Fortune II", "Ore Belt", "Third Redemption", "Frontier Edge"],
+  S4: ["Nopileos' Fortune II", "Ore Belt", "Third Redemption", "Frontier Edge"],
   S5: ["Ore Belt", "Silent Witness XII", "Hewa's Twin V"],
   S6: ["Nopileos' Fortune II", "Gaian Prophecy", "Segaris", "Ore Belt"],
-  S7: ["Silent Witness XI", "Silent Witness XII", "Circle of Deceit"],
+  S7: ["Silent Witness XI", "Silent Witness XII", "Circle of Deceit", "Nopileos' Fortune II"],
 };
 const PROFILES = {
   vanilla: { label: "Vanilla",
     stations: { S1: "Ore Belt", S2: "Ore Belt", S3: "Ore Belt", S4: "Ore Belt", S5: "Ore Belt", S6: "Gaian Prophecy", S7: "Silent Witness XI" } },
   kingpin: { label: "Nopileos Kingpin mod",
-    stations: { S1: "Nopileos' Fortune II", S2: "Nopileos' Fortune II", S3: "Nopileos' Fortune VI", S4: "Nopileos' Fortune VI", S5: "Silent Witness XII", S6: "Nopileos' Fortune II", S7: "Silent Witness XI" } },
+    stations: { S1: "Nopileos' Fortune II", S2: "Nopileos' Fortune II", S3: "Nopileos' Fortune II", S4: "Nopileos' Fortune II", S5: "Silent Witness XII", S6: "Nopileos' Fortune II", S7: "Silent Witness XI" } },
 };
 function optionsFor(station) {
   const list = (STATION_OPTIONS[station.id] || []).filter(n => LOCATIONS[n] && (!LOCATIONS[n].kingpin || state.profile === "kingpin"));
@@ -1430,7 +1429,7 @@ function mInfoView() {
       <button class="${state.profile === "vanilla" ? "on" : ""}" onclick="setProfile('vanilla')">Vanilla</button>
       <button class="${state.profile === "kingpin" ? "on" : ""}" onclick="setProfile('kingpin')">Kingpin mod</button>
     </div>
-    <div class="m-sub" style="padding-top:6px">Vanilla puts S1–S5 in the Ore Belt hub. With the Nopileos Kingpin mod, Nopileos' Fortune II + VI have 250 % sun and extra resources, so S1–S4 and S6 move there. Each station also has 2–3 location options; picking one sets its sunlight and solar module count.</div>
+    <div class="m-sub" style="padding-top:6px">Vanilla puts S1–S5 in the Ore Belt hub. With the Nopileos Kingpin mod, S1–S4 and S6 move to Nopileos' Fortune II: 250 % sun, every raw resource, and a long local highway, so no trader crosses a gate. Each station also has 2–3 location options; picking one sets its sunlight and solar module count.</div>
   </div>
 
   <div class="m-card">

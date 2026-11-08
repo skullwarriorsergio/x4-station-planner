@@ -513,7 +513,7 @@ const PROFILES = {
 };
 function optionsFor(station) {
   const list = (STATION_OPTIONS[station.id] || []).filter(n => LOCATIONS[n] && (!LOCATIONS[n].kingpin || state.profile === "kingpin"));
-  if (station.sector && !list.includes(station.sector)) list.unshift(station.sector);
+  if (station.sector && LOCATIONS[station.sector] && !list.includes(station.sector)) list.unshift(station.sector);
   return list;
 }
 // Solar modules needed at a sunlight for the station's current EC use
@@ -592,12 +592,13 @@ function loadState() {
 function loadStateFix() {
   if (!PROFILES[state.profile]) state.profile = "vanilla";
   const defs = buildDefaults(state.profile);
+  for (const s of state.stations) s.modules = (s.modules || []).filter(m => WARES[m.wareId]);
   for (const d of defs) {
     const s = state.stations.find(x => x.id === d.id);
     if (!s) state.stations.push(d);
-    else if (!s.sector) s.sector = d.sector;
+    // no sector yet, or a sector that is no longer offered (e.g. Nopileos' Fortune VI): move to this profile's default
+    else if (!s.sector || !LOCATIONS[s.sector]) placeAt(s, d.sector);
   }
-  for (const s of state.stations) s.modules = (s.modules || []).filter(m => WARES[m.wareId]);
 }
 function layoutIsDefault() {
   return JSON.stringify(state.stations) === JSON.stringify(buildDefaults(state.profile));
@@ -858,6 +859,25 @@ function renderStations(calc) {
   const root = document.getElementById("stations");
   root.innerHTML = "";
   state.stations.forEach((station, idx) => {
+    try { renderStationCard(root, station, idx, calc); }
+    catch (e) { root.appendChild(brokenCard(station, idx, e)); }
+  });
+}
+function brokenCard(station, idx, e) {
+  const card = document.createElement("div");
+  card.className = "station short";
+  card.innerHTML = `<div class="station-header"><div class="station-title">${escapeHTML(station.name || station.id)}</div></div>
+    <div class="station-body"><div class="station-sub" style="color:var(--bad)">This station could not be shown (${escapeHTML(e.message)}).</div>
+    <button style="margin-top:8px" onclick="resetStation(${idx})">Reset this station</button></div>`;
+  return card;
+}
+function resetStation(idx) {
+  const d = buildDefaults(state.profile).find(x => x.id === state.stations[idx].id);
+  if (d) state.stations[idx] = d; else state.stations.splice(idx, 1);
+  render();
+}
+function renderStationCard(root, station, idx, calc) {
+  {
     const r = calc.perStation[station.id];
     const card = document.createElement("div");
     const { shortWares, ecShort, any } = stationIssues(station, calc);
@@ -902,7 +922,7 @@ function renderStations(calc) {
       </div>
     `;
     root.appendChild(card);
-  });
+  }
 }
 
 function moduleProdText(ware, row) {
@@ -1211,7 +1231,15 @@ function renderMobile(calc) {
       return `<button class="m-chip ${i === ui.station ? "on" : ""} ${iss.any ? "short" : ""}" onclick="mStation(${i})">${escapeHTML(s.id)}${iss.any ? " ⚠" : ""}</button>`;
     }).join("")}</div>` : ""}`;
 
-  if (ui.tab === "stations") main.innerHTML = mStationView(calc);
+  if (ui.tab === "stations") {
+    try { main.innerHTML = mStationView(calc); }
+    catch (e) {
+      const st = state.stations[ui.station];
+      main.innerHTML = `<div class="m-card short"><div class="m-name">${escapeHTML(st.name || st.id)}</div>
+        <div class="m-text neg" style="padding:8px 0">This station could not be shown (${escapeHTML(e.message)}).</div>
+        <div class="m-btns"><button onclick="resetStation(${ui.station})">Reset this station</button></div></div>`;
+    }
+  }
   else if (ui.tab === "totals") main.innerHTML = mTotalsView(calc);
   else if (ui.tab === "allo") main.innerHTML = mAlloView(calc);
   else main.innerHTML = mInfoView();

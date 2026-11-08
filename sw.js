@@ -1,6 +1,6 @@
 // Offline support: the app opens instantly from the cache, then refreshes itself in the background.
 // CACHE changes with every published index.html (tools/deploy_planner.py stamps it).
-const CACHE = 'x4planner-eff727b9da';
+const CACHE = 'x4planner-18ad667b1d';
 const ASSETS = [
  "./",
  "./index.html",

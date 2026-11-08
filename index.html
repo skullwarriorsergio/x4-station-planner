@@ -1,0 +1,1555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="X4 Planner">
+<meta name="theme-color" content="#161e27">
+<meta name="color-scheme" content="dark">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>X4 Station Planner</title>
+<script>
+// Pick the view before the first paint: saved choice (auto / mobile / desktop), else phone-sized screens get the mobile view.
+(function () {
+  var view = "auto";
+  try { view = (JSON.parse(localStorage.getItem("x4_ubsp_ui") || "{}").view) || "auto"; } catch (e) {}
+  var mq = window.matchMedia("(max-width: 760px), (hover: none) and (pointer: coarse) and (max-width: 1100px)");
+  if (view === "mobile" || (view !== "desktop" && mq.matches)) document.documentElement.classList.add("mobile");
+})();
+</script>
+<style>
+  :root {
+    --bg: #0d1217;
+    --bg-panel: #161e27;
+    --bg-row: #1c2632;
+    --border: #28333f;
+    --accent: #4fd1c5;
+    --accent-dim: #2c7a7b;
+    --good: #68d391;
+    --bad: #fc8181;
+    --warn: #f6ad55;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --text-faint: #64748b;
+    --raw: #d6bcfa;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 16px;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  h1 { font-size: 18px; margin: 0; color: var(--accent); }
+  h2 { font-size: 14px; margin: 0 0 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; }
+  h3 { font-size: 12px; margin: 12px 0 4px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; }
+  button {
+    background: var(--bg-row);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    cursor: pointer;
+    border-radius: 3px;
+    font: inherit;
+  }
+  button:hover { background: var(--accent-dim); border-color: var(--accent); }
+  input[type="number"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    width: 56px;
+    text-align: right;
+    font: inherit;
+    border-radius: 2px;
+  }
+  input[type="number"]:focus { outline: 1px solid var(--accent); }
+  select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    font: inherit;
+    border-radius: 2px;
+  }
+  code { font-size: 0.95em; color: var(--text); }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; }
+  .station { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; }
+  .station-header {
+    padding: 10px 12px;
+    background: linear-gradient(180deg, #1e2a37, #161e27);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .station-title { font-weight: 600; color: var(--accent); }
+  .station-sub { color: var(--text-faint); font-size: 11px; margin-top: 2px; }
+  .station-body { padding: 10px 12px; }
+  .modules-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .modules-table th { text-align: left; color: var(--text-dim); font-weight: normal; text-transform: uppercase; font-size: 10px; letter-spacing: 0.3px; padding: 4px 4px; border-bottom: 1px solid var(--border); }
+  .modules-table td { padding: 3px 4px; border-bottom: 1px solid #1d2832; }
+  .modules-table td.right, .modules-table th.right { text-align: right; }
+  .modules-table td.center, .modules-table th.center { text-align: center; }
+  .num { font-variant-numeric: tabular-nums; }
+  .pos { color: var(--good); }
+  .neg { color: var(--bad); }
+  .warn { color: var(--warn); }
+  .neutral { color: var(--text-faint); }
+  .raw { color: var(--raw); }
+  .chain-table th, .chain-table td { padding: 3px 4px; font-size: 11px; }
+  .chain-table tbody tr:hover { background: #1a2330; }
+  .chain-short-banner { background: #5a1d1d; color: #fed7d7; padding: 4px 8px; font-size: 11px; border-bottom: 1px solid var(--bad); text-align: center; }
+  .station.short { border-color: var(--bad); }
+  .add-module { margin-top: 8px; display: flex; gap: 4px; }
+  .add-module select { flex: 1; min-width: 0; }
+  .sunlight { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); }
+  .sunlight input { width: 60px; }
+  .delete-btn { background: transparent; border: 1px solid transparent; color: var(--text-faint); padding: 0 4px; cursor: pointer; }
+  .delete-btn:hover { color: var(--bad); border-color: var(--bad); background: transparent; }
+  .summary-block { background: var(--bg-row); padding: 8px; border-radius: 3px; margin-top: 10px; }
+  .ware-line { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; font-size: 11px; }
+  .ware-line .label { color: var(--text-dim); }
+  .global-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-top: 16px; }
+  .global-panel { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 4px; padding: 12px; }
+  .global-panel.warn { border-color: var(--warn); }
+  .global-panel.bad { border-color: var(--bad); }
+  .pill { display: inline-block; padding: 1px 6px; background: var(--bg-row); border-radius: 10px; font-size: 10px; color: var(--text-dim); }
+  .ware-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .ware-table th { text-align: left; color: var(--text-dim); font-weight: normal; font-size: 10px; text-transform: uppercase; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  .ware-table td { padding: 3px 6px; border-bottom: 1px solid #1d2832; }
+  .ware-table td.right, .ware-table th.right { text-align: right; }
+  .footer-note { color: var(--text-faint); font-size: 11px; margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--border); }
+  details summary { cursor: pointer; color: var(--text-dim); font-size: 11px; padding: 6px 0; }
+  details[open] summary { color: var(--accent); }
+  .info-panel { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; margin-bottom: 12px; }
+  .info-panel ul { margin: 4px 0 0 18px; padding: 0; }
+  .info-panel li { margin: 2px 0; color: var(--text-dim); }
+  .info-panel b { color: var(--text); }
+  .wide { grid-column: 1 / -1; }
+  .calc-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 6px 0 8px; font-size: 12px; }
+  .calc-row input[type="number"] { width: 90px; }
+  .big { font-size: 15px; font-weight: 600; color: var(--accent); }
+  .scroll-x { overflow-x: auto; }
+  td.wrap { white-space: normal; color: var(--text-dim); }
+  .loc-opt { padding: 6px 0; border-bottom: 1px solid #1d2832; }
+  .loc-opt:last-child { border-bottom: none; }
+
+  /* ---------- view switching ---------- */
+  html.mobile #desktop { display: none; }
+  html:not(.mobile) #mobile { display: none; }
+
+  /* ---------- mobile view ---------- */
+  html.mobile body { padding: 0; font-size: 15px; -webkit-text-size-adjust: 100%; }
+  html.mobile input, html.mobile select, html.mobile button { font-size: 16px; } /* 16px stops iOS zooming on focus */
+  .m-head {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg-panel); border-bottom: 1px solid var(--border);
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .m-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px 8px; }
+  .m-title { font-size: 17px; font-weight: 700; color: var(--accent); }
+  .m-title small { font-size: 11px; font-weight: 500; color: var(--text-faint); margin-left: 6px; }
+  .m-chips { display: flex; gap: 6px; overflow-x: auto; padding: 0 16px 10px; scrollbar-width: none; }
+  .m-chips::-webkit-scrollbar { display: none; }
+  .m-chip { flex: 0 0 auto; padding: 7px 14px; border-radius: 18px; border: 1px solid var(--border); background: var(--bg-row); color: var(--text-dim); font-weight: 600; font-size: 14px; }
+  .m-chip.on { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
+  .m-chip.short { border-color: var(--bad); color: var(--bad); }
+  .m-chip.on.short { color: #fff; }
+  .m-main { padding: 4px 16px calc(88px + env(safe-area-inset-bottom, 0px)); max-width: 680px; margin: 0 auto; }
+  .m-card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin: 12px 0; }
+  .m-card.short { border-color: var(--bad); }
+  .m-card.bad { border-color: var(--bad); }
+  .m-card h2 { font-size: 13px; margin: 0 0 6px; }
+  .m-name { font-size: 18px; font-weight: 700; color: var(--accent); }
+  .m-sub { font-size: 12px; color: var(--text-faint); }
+  .m-banner { background: #5a1d1d; color: #fed7d7; border: 1px solid var(--bad); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-top: 10px; }
+  .m-kv { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px; padding: 5px 0; }
+  .m-kv .k { color: var(--text-dim); }
+  .m-kv .v { text-align: right; font-variant-numeric: tabular-nums; }
+  .m-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid #1d2832; }
+  .m-row:last-child { border-bottom: none; }
+  .m-row .grow { flex: 1; min-width: 0; }
+  .m-row .t { font-size: 15px; }
+  .m-row .s { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+  .m-row .r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stepper { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+  .stepper button { width: 38px; height: 38px; padding: 0; border-radius: 9px; font-size: 20px; line-height: 1; }
+  .stepper input[type="number"] { width: 56px; height: 38px; text-align: center; border-radius: 8px; padding: 0 4px; }
+  .m-x { background: none; border: none; color: var(--text-faint); font-size: 18px; width: 30px; height: 38px; padding: 0; }
+  .m-add { display: flex; gap: 8px; margin-top: 10px; }
+  .m-add select { flex: 1; min-width: 0; height: 40px; border-radius: 8px; }
+  .m-add button { height: 40px; border-radius: 8px; padding: 0 16px; }
+  details.m-sec { border-top: 1px solid var(--border); margin-top: 10px; }
+  details.m-sec > summary { list-style: none; display: flex; justify-content: space-between; align-items: center; padding: 12px 0 8px; font-size: 14px; color: var(--text); }
+  details.m-sec > summary::-webkit-details-marker { display: none; }
+  details.m-sec > summary::after { content: "▸"; color: var(--text-faint); font-size: 14px; }
+  details.m-sec[open] > summary::after { content: "▾"; color: var(--accent); }
+  details.m-sec > summary .cnt { margin-left: auto; margin-right: 8px; font-size: 12px; color: var(--text-faint); }
+  details.m-note > summary { font-size: 13px; padding: 8px 0 0; }
+  .m-note-text { font-size: 13px; color: var(--text-dim); padding-top: 4px; }
+  .m-nav { display: flex; gap: 10px; margin: 6px 0 12px; }
+  .m-nav button { flex: 1; height: 44px; border-radius: 10px; font-size: 15px; }
+  .m-tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    display: flex; background: var(--bg-panel); border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .m-tabbar button { flex: 1; background: none; border: none; border-radius: 0; color: var(--text-faint); padding: 8px 0 7px; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .m-tabbar button .ico { font-size: 21px; line-height: 1.1; }
+  .m-tabbar button.on { color: var(--accent); }
+  .m-big { font-size: 22px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .m-calc { display: flex; flex-direction: column; gap: 8px; }
+  .m-calc .line { display: flex; gap: 8px; }
+  .m-calc input[type="number"] { flex: 0 0 120px; height: 42px; border-radius: 8px; text-align: right; }
+  .m-calc select { flex: 1; min-width: 0; height: 42px; border-radius: 8px; }
+  .m-seg { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .m-seg button { flex: 1; border: none; border-radius: 0; height: 40px; background: var(--bg-row); }
+  .m-seg button.on { background: var(--accent-dim); color: #fff; }
+  .m-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .m-btns button { flex: 1; height: 44px; border-radius: 10px; }
+  .m-field { padding: 10px 0; border-bottom: 1px solid #1d2832; }
+  .m-field:last-child { border-bottom: none; }
+  .m-field .hd { display: flex; justify-content: space-between; font-weight: 600; }
+  .m-field .bd { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+  .m-info ul { margin: 6px 0 0 18px; padding: 0; }
+  .m-info li { margin: 6px 0; font-size: 14px; color: var(--text-dim); }
+  .m-info b { color: var(--text); }
+  .m-text { font-size: 14px; color: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<!-- ======================= DESKTOP VIEW ======================= -->
+<div id="desktop">
+<header>
+  <div>
+    <h1>X4 Universal Build Station Planner</h1>
+    <div class="station-sub">X4 9.00 data · adjust module counts on any station and the chain demand recomputes live.</div>
+  </div>
+  <div class="toolbar">
+    <label class="station-sub" title="Nopileos Kingpin mod: Nopileos' Fortune II + VI get 250 % sun and extra resources, so stations move there">
+      <input type="checkbox" id="kp-toggle" onchange="setProfile(this.checked ? 'kingpin' : 'vanilla')"> Nopileos Kingpin mod
+    </label>
+    <label class="station-sub">View
+      <select onchange="setView(this.value)">
+        <option value="auto">Auto</option>
+        <option value="mobile">Mobile</option>
+        <option value="desktop">Desktop</option>
+      </select>
+    </label>
+    <button onclick="resetDefaults()">Reset to plan defaults</button>
+    <button onclick="exportState()">Export</button>
+    <button onclick="importState()">Import</button>
+  </div>
+</header>
+
+<details class="info-panel">
+  <summary>What changed in 9.00 (checked against the 9.00 game files, 2026-11-08)</summary>
+  <ul id="whatsnew">
+    <li><b>Station module recipes: no change.</b> All 30 production recipes used here are identical to 8.00 (and the Terran ones match). The numbers below stay valid.</li>
+    <li><b>Equipment recipes changed a lot.</b> All 76 base turrets and 43 of 44 base shields were re-costed (engines and missiles were not). Turrets now need about 1.5× Turret Components, about 2× Advanced Electronics and 7–13× Energy Cells. Example: ARG M Flak used 21 TC, 5 AE and 18 EC in 8.00; in 9.00 it uses 31 TC, 10 AE and 135 EC. Energy Cells delivered to the shipyard now matter.</li>
+    <li><b>New: Allographyne</b> (ware <code>khaakalloy</code>). Raw Kha'ak scrap goes to the Kha'ak Scrap Processor, which makes Allographyne Fragments. The Kha'ak Scrap Recycler then turns the fragments plus Nividium into Allographyne. A ship-building station uses its <i>own</i> Allographyne stock to stand in for missing wares, by value. Both module blueprints are sold by Hatikvah and Teladi (no research needed). See S7 and the Allographyne panel.</li>
+    <li><b>New option: Terran Scrap Recycler</b> (blueprint from the Segaris Pioneers). It alternates Computronic Substrate and Silicon Carbide made from Scrap Metal. You can add it to S5 to take mining load off S6.</li>
+    <li><b>"Closed loop" recipes</b> (Hull Parts + Claytronics + EC) are only used by NPC factions (Scavengers, Loan Sharks and one Alliance wharf). Player stations use the normal recipes.</li>
+  </ul>
+</details>
+
+<div id="stations" class="grid"></div>
+<div id="globals" class="global-grid"></div>
+
+<div class="footer-note" id="howitworks">
+  Recipes and average prices come from the X4 9.00 <code>wares.xml</code> (base + DLC), checked 2026-11-08. Per-hour rate =
+  <code>(output / cycle) × 3600 × module count</code>. Solar modules are also multiplied by sunlight; production modules are not.
+  Both solar types make the same Energy Cells ware, so each station has one EC balance.
+  The <b>Nopileos Kingpin mod</b> switch picks the sectors: off = the Ore Belt hub and other vanilla sectors with their real sunlight; on = Nopileos' Fortune II + VI at the mod's 250 % sun. Each station's location menu offers 2–3 options, ranked by the mining fields in and next to the sector, sunlight, jumps to its supplier stations and jumps to the nearest Xenon / Kha'ak sector (9.00 gate network). Picking one sets the sunlight and the solar module count.
+  Processor modules (Scrapworks, Kha'ak Scrap Processor) handle 150 units per 60 s at full rate. Like in the game, they only run as fast as the modules on the same station use their output (the % shown).
+  The Kha'ak processor rate is assumed to equal the Scrapworks rate; check the module's "products per hour" in game.
+  Allographyne substitution: <code>ceil(missing quantity × ware average price / 1,400)</code> (community-reported rule, matches the 9.00 prices). It is only used when wares are missing, and only from the building station's own storage.
+  The layout is saved in this browser (localStorage); stations added in a newer version are appended to an older saved layout automatically. Use Export / Import to move a layout between devices.
+</div>
+</div>
+
+<!-- ======================= MOBILE VIEW ======================= -->
+<div id="mobile">
+  <div class="m-head" id="m-head"></div>
+  <main class="m-main" id="m-main"></main>
+  <nav class="m-tabbar" id="m-tabbar"></nav>
+</div>
+
+<script>
+// =============================================================================
+// WARE DEFINITIONS (X4 9.00 wares.xml, checked 2026-11-08)
+// =============================================================================
+// output/cycle/inputs = one module's production cycle. price = 9.00 average price (Cr).
+// outputs: { wareId: amount } for modules that make another id or several wares (alternating queue).
+// processor: runs only as fast as the same station consumes its output (like the game, which stops when storage is full).
+const ALLO_PRICE = 1400; // Allographyne average price, 9.00
+const WARES = {
+  // Raw / mined
+  ore:           { name: "Ore",        raw: true, price: 50 },
+  silicon:       { name: "Silicon",    raw: true, price: 130 },
+  methane:       { name: "Methane",    raw: true, price: 48 },
+  helium:        { name: "Helium",     raw: true, price: 44 },
+  hydrogen:      { name: "Hydrogen",   raw: true, price: 58 },
+  nividium:      { name: "Nividium",   raw: true, price: 510 },
+  rawScrap:      { name: "Raw Scrap",  raw: true, price: 180 },
+  rawKhaakScrap: { name: "Allographyne Scrap (raw Kha'ak scrap)", raw: true, price: 40 },
+
+  // Energy (both solar types make the same Energy Cells ware)
+  ec:        { name: "Energy Cells",                 output: 175, cycle: 60, inputs: {}, isEC: true, price: 16 },
+  terranEC:  { name: "Energy Cells (Terran solar)",  outputs: { ec: 50 }, cycle: 60, inputs: {}, isEC: true, price: 16 },
+
+  // Tier 1 refining
+  refinedMetals:     { name: "Refined Metals",     output: 88,  cycle: 150, inputs: { ec: 90,  ore: 240 },      price: 148 },
+  siliconWafers:     { name: "Silicon Wafers",     output: 107, cycle: 180, inputs: { ec: 90,  silicon: 240 },  price: 299 },
+  graphene:          { name: "Graphene",           output: 96,  cycle: 240, inputs: { ec: 80,  methane: 320 },  price: 166 },
+  superfluidCoolant: { name: "Superfluid Coolant", output: 95,  cycle: 240, inputs: { ec: 60,  helium: 320 },   price: 150 },
+  antimatterCells:   { name: "Antimatter Cells",   output: 99,  cycle: 120, inputs: { ec: 100, hydrogen: 320 }, price: 202 },
+
+  // Tier 2 intermediate
+  microchips:       { name: "Microchips",          output: 72,  cycle: 600, inputs: { ec: 50, siliconWafers: 200 }, price: 948 },
+  quantumTubes:     { name: "Quantum Tubes",       output: 94,  cycle: 720, inputs: { ec: 40, graphene: 116, superfluidCoolant: 30 }, price: 300 },
+  plasmaConductors: { name: "Plasma Conductors",   output: 44,  cycle: 900, inputs: { ec: 60, graphene: 96,  superfluidCoolant: 140 }, price: 1026 },
+  advComposites:    { name: "Advanced Composites", output: 54,  cycle: 300, inputs: { ec: 50, graphene: 80,  refinedMetals: 80 }, price: 540 },
+  scanningArrays:   { name: "Scanning Arrays",     output: 36,  cycle: 600, inputs: { ec: 60, refinedMetals: 100, siliconWafers: 60 }, price: 1053 },
+  smartChips:       { name: "Smart Chips",         output: 143, cycle: 600, inputs: { ec: 50, siliconWafers: 20 }, price: 57 },
+
+  // Tier 3 end wares
+  hullParts:            { name: "Hull Parts",            output: 294, cycle: 900,  inputs: { ec: 80, graphene: 40,  refinedMetals: 280 }, price: 209 },
+  engineParts:          { name: "Engine Parts",          output: 208, cycle: 900,  inputs: { ec: 60, antimatterCells: 80, refinedMetals: 96 }, price: 182 },
+  advElectronics:       { name: "Advanced Electronics",  output: 54,  cycle: 720,  inputs: { ec: 60, microchips: 44, quantumTubes: 20 }, price: 1014 },
+  shieldComponents:     { name: "Shield Components",     output: 193, cycle: 1200, inputs: { ec: 70, plasmaConductors: 20, quantumTubes: 20 }, price: 188 },
+  fieldCoils:           { name: "Field Coils",           output: 175, cycle: 600,  inputs: { ec: 60, plasmaConductors: 40, quantumTubes: 43 }, price: 412 },
+  weaponComponents:     { name: "Weapon Components",     output: 170, cycle: 1800, inputs: { ec: 60, hullParts: 20, plasmaConductors: 30 }, price: 285 },
+  turretComponents:     { name: "Turret Components",     output: 170, cycle: 1800, inputs: { ec: 60, microchips: 20, quantumTubes: 20, scanningArrays: 10 }, price: 273 },
+  missileComponents:    { name: "Missile Components",    output: 281, cycle: 900,  inputs: { ec: 20, advComposites: 2, hullParts: 2 }, price: 9 },
+  droneComponents:      { name: "Drone Components",      output: 105, cycle: 1200, inputs: { ec: 60, engineParts: 20, hullParts: 20, microchips: 20, scanningArrays: 40 }, price: 914 },
+  antimatterConverters: { name: "Antimatter Converters", output: 133, cycle: 300,  inputs: { ec: 80, advComposites: 20, microchips: 30 }, price: 354 },
+
+  // Recycling (S5). The Scrapworks processes 150 units per 60 s cycle (per-unit recipe: 10 EC + 1 Raw Scrap).
+  scrapMetal:     { name: "Scrap Metal (Scrapworks)", output: 150, cycle: 60, inputs: { ec: 1500, rawScrap: 150 }, processor: true, price: 375 },
+  hullPartsRecyc: { name: "Hull Parts (Scrap Recycler)", outputs: { hullParts: 200 }, cycle: 300, inputs: { ec: 3500, scrapMetal: 75 }, price: 209 },
+  claytronics:    { name: "Claytronics (Scrap Recycler)", output: 60, cycle: 300, inputs: { ec: 12000, scrapMetal: 300 }, price: 2040 },
+  terranScrapRecycler: { name: "Terran Scrap Recycler (CS + SiC, alternating)", outputs: { computronicSubstrate: 50, siliconCarbide: 60 }, cycle: 600, inputs: { ec: 16500, scrapMetal: 1250 } },
+
+  // Allographyne (S7) — new in 9.00
+  khaakScrapMetal: { name: "Allographyne Fragments (Kha'ak Scrap Processor)", output: 150, cycle: 60, inputs: { ec: 1500, rawKhaakScrap: 150 }, processor: true, price: 220 },
+  allographyne:    { name: "Allographyne (Kha'ak Scrap Recycler)", output: 100, cycle: 300, inputs: { ec: 6000, khaakScrapMetal: 300, nividium: 200 }, price: ALLO_PRICE },
+
+  // Terran (S6)
+  metallicMicrolattice: { name: "Metallic Microlattice", output: 190, cycle: 180, inputs: { ec: 50, ore: 50, helium: 130 }, price: 50 },
+  siliconCarbide:       { name: "Silicon Carbide",       output: 48,  cycle: 300, inputs: { ec: 200, metallicMicrolattice: 2, methane: 400, silicon: 300 }, price: 1414 },
+  computronicSubstrate: { name: "Computronic Substrate", output: 98,  cycle: 600, inputs: { ec: 4000, ore: 3000, silicon: 3000, hydrogen: 2000 }, price: 8280 },
+};
+
+// Wares delivered to the shipyard / wharf / equipment dock
+const END_WARES = new Set([
+  "advElectronics","antimatterConverters","droneComponents","engineParts","fieldCoils",
+  "hullParts","missileComponents","scanningArrays","shieldComponents","smartChips",
+  "turretComponents","weaponComponents","claytronics",
+  "siliconCarbide","computronicSubstrate","metallicMicrolattice","allographyne"
+]);
+
+// Raw Kha'ak scrap fields, 9.00 mapdefaults (base + DLC). Yield/regrow from regionyields.xml.
+const KHAAK_FIELDS = [
+  { sector: "Silent Witness XII", sun: 1.47, src: "base", fields: "1 small field · low yield (50,000) · very fast gathering (×5) · regrows 40 min",
+    also: "Huge Raw Scrap fields, ore, silicon", note: "Next door to S7's default (Silent Witness XI). Kha'ak hive + Scale Plate pirate base at game start." },
+  { sector: "Circle of Deceit", sun: 1.42, src: "base", fields: "1 tiny field · low yield (50,000) · average gathering · regrows 40 min",
+    also: "2 huge Raw Scrap fields, helium, methane", note: "2 jumps from the Ore Belt hub; borders Sanctum Verge (2 Kha'ak hives)." },
+  { sector: "Getsu Fune", sun: 0.93, src: "base", fields: "1 tiny field · low yield (50,000) · average gathering · regrows 40 min",
+    also: "2 huge very-high Raw Scrap fields, ice, ore, silicon", note: "" },
+  { sector: "Family Nhuut", sun: 0.85, src: "Split Vendetta", fields: "3 tiny fields · very low yield (5,000 each) · average gathering · regrows 20 min",
+    also: "Nividium (1 small, low, very fast), Raw Scrap, all gases and minerals", note: "The only sector with both Kha'ak scrap and Nividium." },
+  { sector: "Matrix #1", sun: 4.08, src: "Timelines", fields: "2 small fields · low yield (50,000) · very slow gathering (×0.2) · regrows 40 min",
+    also: "Raw Scrap (2 huge + 3 medium), ore, silicon", note: "Xenon space." },
+];
+// Nividium belts worth knowing for S7 (9.00 mapdefaults). Nop II is listed with the Kingpin mod's 250 % sun.
+const NIVIDIUM_BELTS = [
+  { sector: "Silent Witness XI", sun: 1.18, fields: "2 huge · low (1,000) · very fast · regrows 150 min", note: "S7's default sector: Nividium on site, Kha'ak scrap next door." },
+  { sector: "Nopileos' Fortune II", sun: 2.5, kingpin: true, fields: "2 small · low (1,000 each) · fast · regrows 150 min", note: "Kingpin mod (250 % sun). Small fields: a top-up, not a full supply." },
+  { sector: "Atiya's Misfortune I", sun: 1.09, fields: "1 medium · very high (50,000) · average", note: "Xenon stronghold (xenon_buff)." },
+  { sector: "Atiya's Misfortune III", sun: 0.93, fields: "1 medium · very high (50,000) · average", note: "" },
+  { sector: "Trinity Sanctum VII", sun: 1.06, fields: "1 large · high (10,000) · very fast", note: "" },
+  { sector: "Turquoise Sea X", sun: 1.28, fields: "1 medium · high (10,000) · average", note: "" },
+  { sector: "Pious Mists XI", sun: 1.18, fields: "2 large · medium (5,000) · very fast", note: "" },
+  { sector: "Gaian Prophecy", sun: 2.08, fields: "1 huge · medium (5,000) · very fast", note: "Terran space." },
+  { sector: "Savage Spur II", sun: 1.25, fields: "2 huge · medium (5,000) · very fast", note: "" },
+];
+
+// Who sells the Kha'ak module blueprints (9.00 wares.xml: module owners hatikvah + teladi, no research entry)
+const BLUEPRINT_NOTE = "Kha'ak Scrap Processor + Kha'ak Scrap Recycler blueprints: Hatikvah Free League or Teladi Company representative. No research needed.";
+function nividiumRows() { return NIVIDIUM_BELTS.filter(f => !f.kingpin || state.profile === "kingpin"); }
+
+function outputsOf(wareId) {
+  const w = WARES[wareId];
+  if (!w || w.raw) return {};
+  return w.outputs || { [wareId]: w.output };
+}
+
+// =============================================================================
+// STATIONS - default layouts from universal_build_station_plan.md
+// =============================================================================
+const STATION_DEFAULTS = [
+  { id: "S1", name: "S1 Gas Refinery",       sunlight: 2.5,
+    note: "Gas chain (Methane + Helium). All gas intermediates made on site.",
+    modules: [
+      { wareId: "ec", count: 1 },
+      { wareId: "graphene", count: 5 },
+      { wareId: "superfluidCoolant", count: 3 },
+      { wareId: "quantumTubes", count: 3 },
+      { wareId: "plasmaConductors", count: 6 },
+    ]
+  },
+  { id: "S2", name: "S2 Mineral Refinery",   sunlight: 2.5,
+    note: "Mineral chain (Ore + Silicon + Hydrogen). Silicon intermediates made on site.",
+    modules: [
+      { wareId: "ec", count: 2 },
+      { wareId: "refinedMetals", count: 9 },
+      { wareId: "siliconWafers", count: 4 },
+      { wareId: "antimatterCells", count: 1 },
+      { wareId: "microchips", count: 5 },
+      { wareId: "scanningArrays", count: 2 },
+      { wareId: "smartChips", count: 6 },
+    ]
+  },
+  { id: "S3", name: "S3 Hull & Weapons",     sunlight: 2.5,
+    note: "Structural + weapon parts. HP and Advanced Composites partly used on site.",
+    modules: [
+      { wareId: "ec", count: 1 },
+      { wareId: "advComposites", count: 1 },
+      { wareId: "hullParts", count: 13 },
+      { wareId: "engineParts", count: 5 },
+      { wareId: "weaponComponents", count: 5 },
+      { wareId: "missileComponents", count: 2 },
+    ]
+  },
+  { id: "S4", name: "S4 Tech & Defense",     sunlight: 1.0,
+    note: "Commonwealth end wares. 9.00 turrets cost more Turret Components + Advanced Electronics; Boron L shields need Field Coils + Shield Components.",
+    modules: [
+      { wareId: "ec", count: 1 },
+      { wareId: "advElectronics", count: 5 },
+      { wareId: "shieldComponents", count: 2 },
+      { wareId: "fieldCoils", count: 2 },
+      { wareId: "turretComponents", count: 5 },
+      { wareId: "droneComponents", count: 2 },
+      { wareId: "antimatterConverters", count: 2 },
+    ]
+  },
+  { id: "S5", name: "S5 Recycled Fabricator", sunlight: 1.47,
+    note: "Self-contained scrap recycler. The Scrapworks only process what the recyclers use, so the solar modules are sized for the recyclers, not for two Scrapworks at full speed.",
+    modules: [
+      { wareId: "ec", count: 16 },
+      { wareId: "scrapMetal", count: 2 },
+      { wareId: "hullPartsRecyc", count: 1 },
+      { wareId: "claytronics", count: 1 },
+    ]
+  },
+  { id: "S6", name: "S6 Terran Forge",        sunlight: 2.5,
+    note: "Standalone Terran wares for TER shields, engines and turrets. Silicon + Ore are the big mining loads.",
+    modules: [
+      { wareId: "terranEC", count: 12 },
+      { wareId: "metallicMicrolattice", count: 4 },
+      { wareId: "siliconCarbide", count: 4 },
+      { wareId: "computronicSubstrate", count: 3 },
+    ]
+  },
+  { id: "S7", name: "S7 Allographyne Works",  sunlight: 1.47,
+    note: "Ship its Allographyne to your shipyard: a shipyard only uses Allographyne held in its own storage (give the shipyard a buy offer, no sell offer). Module blueprints: buy both Kha'ak modules from a Hatikvah Free League or Teladi Company representative (no research needed).",
+    modules: [
+      { wareId: "ec", count: 8 },
+      { wareId: "khaakScrapMetal", count: 1 },
+      { wareId: "allographyne", count: 1 },
+    ]
+  },
+];
+
+// =============================================================================
+// LOCATIONS - candidate sectors (9.00 mapdefaults: sunlight + mining fields; gate network + god.xml for
+// neighbours and the jumps to the nearest Xenon / Kha'ak sector). The Kingpin mod sets Nopileos' Fortune II + VI to 250 %.
+// =============================================================================
+const LOCATIONS = {
+  "Ore Belt":            { sun: 1.34, res: "Ore high, Raw Scrap high, Helium / Methane / Hydrogen medium", near: "Silicon very high one jump away (Frontier Edge, Adventure's Promise)", risk: "No Xenon gate; borders Sanctum Verge (2 Kha'ak hives)" },
+  "Frontier Edge":       { sun: 1.72, res: "Ore, Silicon, Hydrogen, Methane very high; Helium medium", near: "Next to Ore Belt", risk: "Borders Atiya's Misfortune I (Xenon)" },
+  "Adventure's Promise": { sun: 0.71, res: "Ore + Silicon very high; Helium, Methane, Hydrogen high; Nividium low", near: "Next to Ore Belt", risk: "2 jumps from Kha'ak; low sun = more solar modules" },
+  "Third Redemption":    { sun: 1.00, res: "Ice + Methane medium, little Ore", near: "Next to Ore Belt", risk: "2 jumps from Kha'ak (Hyperion Pack sector)" },
+  "Gaian Prophecy":      { sun: 2.08, res: "All five raw resources very high; Nividium medium", near: "Segaris next door", risk: "Segaris Pioneers space, 3 jumps from Kha'ak; far from the Ore Belt hub" },
+  "Segaris":             { sun: 1.87, res: "Ore, Silicon, Ice very high; Helium, Methane, Hydrogen high", near: "Gaian Prophecy next door", risk: "Pioneers home, 4 jumps from Kha'ak" },
+  "Silent Witness XII":  { sun: 1.47, res: "Raw Scrap very high; raw Kha'ak scrap (low, very fast); Ore + Silicon medium", near: "Nividium next door (Silent Witness XI)", risk: "Kha'ak hive + Scale Plate pirate base at game start: clear the hive first" },
+  "Silent Witness XI":   { sun: 1.18, res: "Nividium (2 huge fields, low, very fast); Ore very high; Silicon high", near: "Raw Kha'ak scrap next door (Silent Witness XII); more Nividium in Silent Witness I", risk: "Hatikvah freeport; borders the Kha'ak hive in XII" },
+  "Circle of Deceit":    { sun: 1.42, res: "Raw Kha'ak scrap (low); Helium + Methane high; Raw Scrap medium", near: "2 jumps from Ore Belt", risk: "Borders Sanctum Verge (2 Kha'ak hives)" },
+  "Hewa's Twin V":       { sun: 0.82, res: "Raw Scrap very high; Ore + Silicon high", near: "Teladi space", risk: "Safest scrap site: 5 jumps from Xenon / Kha'ak; low sun" },
+  "Nopileos' Fortune II": { sun: 2.5, kingpin: true, res: "Ore + Hydrogen very high, Ice high, Nividium low; the mod adds Silicon, Helium, Methane", near: "Nopileos' Fortune VI next door", risk: "3 jumps from Xenon / Kha'ak" },
+  "Nopileos' Fortune VI": { sun: 2.5, kingpin: true, res: "No mining fields", near: "Next to Nopileos' Fortune II", risk: "2 jumps from Xenon / Kha'ak" },
+};
+// 2-3 options per station, best first. Kingpin-only sectors are offered only with the Kingpin switch on.
+const STATION_OPTIONS = {
+  S1: ["Nopileos' Fortune II", "Ore Belt", "Frontier Edge", "Adventure's Promise"],
+  S2: ["Nopileos' Fortune II", "Ore Belt", "Adventure's Promise", "Frontier Edge"],
+  S3: ["Nopileos' Fortune VI", "Ore Belt", "Third Redemption", "Frontier Edge"],
+  S4: ["Nopileos' Fortune VI", "Ore Belt", "Third Redemption", "Frontier Edge"],
+  S5: ["Ore Belt", "Silent Witness XII", "Hewa's Twin V"],
+  S6: ["Nopileos' Fortune II", "Gaian Prophecy", "Segaris", "Ore Belt"],
+  S7: ["Silent Witness XI", "Silent Witness XII", "Circle of Deceit"],
+};
+const PROFILES = {
+  vanilla: { label: "Vanilla",
+    stations: { S1: "Ore Belt", S2: "Ore Belt", S3: "Ore Belt", S4: "Ore Belt", S5: "Ore Belt", S6: "Gaian Prophecy", S7: "Silent Witness XI" } },
+  kingpin: { label: "Nopileos Kingpin mod",
+    stations: { S1: "Nopileos' Fortune II", S2: "Nopileos' Fortune II", S3: "Nopileos' Fortune VI", S4: "Nopileos' Fortune VI", S5: "Silent Witness XII", S6: "Nopileos' Fortune II", S7: "Silent Witness XI" } },
+};
+function optionsFor(station) {
+  const list = (STATION_OPTIONS[station.id] || []).filter(n => LOCATIONS[n] && (!LOCATIONS[n].kingpin || state.profile === "kingpin"));
+  if (station.sector && !list.includes(station.sector)) list.unshift(station.sector);
+  return list;
+}
+// Solar modules needed at a sunlight for the station's current EC use
+function ecModulesFor(station, sun) {
+  const ecMod = station.modules.find(m => WARES[m.wareId]?.isEC);
+  if (!ecMod) return 0;
+  const w = WARES[ecMod.wareId];
+  const per = Object.values(outputsOf(ecMod.wareId))[0] * 3600 / w.cycle * sun;
+  const use = calcStation(station).consumed.ec || 0;
+  return Math.max(1, Math.ceil(use * 1.02 / per)); // 2 % margin
+}
+function placeAt(station, sector) {
+  const loc = LOCATIONS[sector];
+  if (!loc) return;
+  station.sector = sector;
+  station.sunlight = loc.sun;
+  const ecMod = station.modules.find(m => WARES[m.wareId]?.isEC);
+  if (ecMod) ecMod.count = ecModulesFor(station, loc.sun);
+}
+function buildDefaults(profile) {
+  const p = PROFILES[profile] || PROFILES.vanilla;
+  return STATION_DEFAULTS.map(d => {
+    const s = deepClone(d);
+    placeAt(s, p.stations[s.id]);
+    return s;
+  });
+}
+function setLocation(sIdx, sector) {
+  placeAt(state.stations[sIdx], sector);
+  render();
+}
+// Location picker + comparison (shared by both views)
+function locationPicker(station, idx, mobile) {
+  const opts = optionsFor(station);
+  const sel = `<select ${mobile ? 'style="width:100%;height:40px;border-radius:8px"' : 'style="flex:1;min-width:0"'} onchange="setLocation(${idx}, this.value)" aria-label="Station location">
+    ${opts.map(n => `<option value="${escapeHTML(n)}" ${n === station.sector ? "selected" : ""}>📍 ${escapeHTML(n)} · ☀ ${Math.round(LOCATIONS[n].sun * 100)}%${LOCATIONS[n].kingpin ? " (Kingpin)" : ""}</option>`).join("")}
+  </select>`;
+  const cur = LOCATIONS[station.sector];
+  const rows = opts.map(n => {
+    const L = LOCATIONS[n];
+    return `<div class="${mobile ? "m-field" : "loc-opt"}">
+      <div class="${mobile ? "hd" : ""}"><b>${escapeHTML(n)}</b> <span class="${mobile ? "m-sub" : "station-sub"}">☀ ${Math.round(L.sun * 100)}% · ${ecModulesFor(station, L.sun)} solar modules${n === station.sector ? " · current" : ""}</span></div>
+      <div class="${mobile ? "bd" : "station-sub"}">⛏ ${escapeHTML(L.res)}</div>
+      <div class="${mobile ? "bd" : "station-sub"}">↔ ${escapeHTML(L.near)}</div>
+      <div class="${mobile ? "bd" : "station-sub"} warn">⚠ ${escapeHTML(L.risk)}</div>
+    </div>`;
+  }).join("");
+  const k = (mobile ? "m-loc-" : "d-loc-") + station.id;
+  return { sel, cur, details: `<details ${mobile ? 'class="m-sec"' : ""} data-k="${k}" ${det(k, false)} ontoggle="uiToggle(this)">
+    <summary>Compare locations <span class="${mobile ? "cnt" : ""}">${opts.length}</span></summary>${rows}</details>` };
+}
+
+// =============================================================================
+// STATE
+// =============================================================================
+const STORAGE_KEY = "x4_ubsp_v1";
+const UI_KEY = "x4_ubsp_ui";
+let state;
+let alloCalc = { wareId: "fieldCoils", qty: 1000 };
+// UI state: view = auto | mobile | desktop; tab + station for the mobile view; open = remembered <details>.
+let ui = { view: "auto", tab: "stations", station: 0, open: { "m-tot-end": true, "m-tot-def": true } };
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) state = JSON.parse(raw);
+  } catch (e) {}
+  if (!state || !Array.isArray(state.stations)) {
+    state = { profile: "vanilla", stations: buildDefaults("vanilla") };
+  }
+  loadStateFix();
+  try { ui = Object.assign(ui, JSON.parse(localStorage.getItem(UI_KEY) || "{}")); } catch (e) {}
+  ui.open = ui.open || {};
+}
+// Repairs a saved or imported layout: known profile, missing default stations appended, sector filled in, unknown modules dropped.
+function loadStateFix() {
+  if (!PROFILES[state.profile]) state.profile = "vanilla";
+  const defs = buildDefaults(state.profile);
+  for (const d of defs) {
+    const s = state.stations.find(x => x.id === d.id);
+    if (!s) state.stations.push(d);
+    else if (!s.sector) s.sector = d.sector;
+  }
+  for (const s of state.stations) s.modules = (s.modules || []).filter(m => WARES[m.wareId]);
+}
+function layoutIsDefault() {
+  return JSON.stringify(state.stations) === JSON.stringify(buildDefaults(state.profile));
+}
+function setProfile(p) {
+  if (!PROFILES[p] || p === state.profile) { render(); return; }
+  if (!layoutIsDefault() && !confirm(`Switch to the ${PROFILES[p].label} defaults? This replaces your current layout (Export it first to keep it).`)) { render(); return; }
+  state = { profile: p, stations: buildDefaults(p) };
+  render();
+}
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+function saveUI() {
+  try { localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch (e) {}
+}
+function deepClone(x) { return JSON.parse(JSON.stringify(x)); }
+
+function resetDefaults() {
+  if (!confirm(`Reset all stations to the ${PROFILES[state.profile].label} defaults?`)) return;
+  state = { profile: state.profile, stations: buildDefaults(state.profile) };
+  ui.station = 0;
+  saveState(); render();
+}
+function exportState() {
+  const json = JSON.stringify(state, null, 2);
+  const fallback = () => prompt("Copy this configuration JSON:", json);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(json).then(() => alert("Configuration JSON copied to clipboard."), fallback);
+  } else fallback();
+}
+function importState() {
+  const json = prompt("Paste configuration JSON:");
+  if (!json) return;
+  try {
+    const parsed = JSON.parse(json);
+    if (!parsed.stations || !Array.isArray(parsed.stations)) throw new Error("Bad shape");
+    state = parsed; loadStateFix(); ui.station = 0; saveState(); render();
+  } catch (e) { alert("Invalid JSON: " + e.message); }
+}
+
+// =============================================================================
+// CALCULATION
+// =============================================================================
+// Per station: normal modules first, then processors throttled to the station's own demand.
+function calcStation(station) {
+  const sun = station.sunlight ?? 1.0;
+  const produced = {}, consumed = {}, rows = [];
+  const add = (o, k, v) => { o[k] = (o[k] || 0) + v; };
+  const deferred = [];
+  station.modules.forEach((m, i) => {
+    const w = WARES[m.wareId];
+    rows[i] = { produced: {}, util: 1 };
+    if (!w || w.raw || !(m.count > 0)) return;
+    if (w.processor) { deferred.push(i); return; }
+    const mult = m.count * 3600 / w.cycle * (w.isEC ? sun : 1);
+    for (const [o, a] of Object.entries(outputsOf(m.wareId))) {
+      rows[i].produced[o] = a * mult;
+      add(produced, o, a * mult);
+    }
+    for (const [k, a] of Object.entries(w.inputs || {})) add(consumed, k, a * mult);
+  });
+  for (const i of deferred) {
+    const m = station.modules[i];
+    const w = WARES[m.wareId];
+    const [outId, outAmt] = Object.entries(outputsOf(m.wareId))[0];
+    const fullMult = m.count * 3600 / w.cycle;
+    const max = outAmt * fullMult;
+    const demand = consumed[outId] || 0;
+    const made = demand > 0 ? Math.min(max, demand) : max;
+    const util = max > 0 ? made / max : 0;
+    rows[i] = { produced: { [outId]: made }, util };
+    add(produced, outId, made);
+    for (const [k, a] of Object.entries(w.inputs || {})) add(consumed, k, a * fullMult * util);
+  }
+  const net = {};
+  for (const w of new Set([...Object.keys(produced), ...Object.keys(consumed)])) net[w] = (produced[w] || 0) - (consumed[w] || 0);
+  return { produced, consumed, net, rows };
+}
+
+function calcGlobal() {
+  const perStation = {};
+  for (const s of state.stations) perStation[s.id] = calcStation(s);
+  // Aggregate (EC is per station only)
+  const totals = {};
+  for (const s of state.stations) {
+    const r = perStation[s.id];
+    for (const w of new Set([...Object.keys(r.produced), ...Object.keys(r.consumed)])) {
+      if (w === "ec") continue;
+      if (!totals[w]) totals[w] = { produced: 0, consumed: 0, perStation: {} };
+      totals[w].produced += r.produced[w] || 0;
+      totals[w].consumed += r.consumed[w] || 0;
+      totals[w].perStation[s.id] = (r.produced[w] || 0) - (r.consumed[w] || 0);
+    }
+  }
+  return { perStation, totals };
+}
+
+// Chain shortages for wares a station produces + its EC shortfall (shared by both views)
+function stationIssues(station, calc) {
+  const r = calc.perStation[station.id];
+  const shortWares = [];
+  for (const m of station.modules) {
+    if ((m.count || 0) <= 0) continue;
+    const w = WARES[m.wareId];
+    if (!w || w.raw || w.isEC) continue;
+    for (const out of Object.keys(outputsOf(m.wareId))) {
+      const t = calc.totals[out];
+      if (!t) continue;
+      const net = t.produced - t.consumed;
+      if (net < -0.5 && !shortWares.find(s => s.w === out)) shortWares.push({ w: out, short: -net });
+    }
+  }
+  const ecShort = (r.consumed.ec || 0) - (r.produced.ec || 0);
+  return { shortWares, ecShort, any: shortWares.length > 0 || ecShort > 0.5 };
+}
+
+// Rows shared by both views
+function productionRowsFor(station, r, calc) {
+  const made = new Set();
+  for (const m of station.modules) {
+    if ((m.count || 0) <= 0) continue;
+    const w = WARES[m.wareId];
+    if (!w || w.raw) continue;
+    for (const o of Object.keys(outputsOf(m.wareId))) made.add(o);
+  }
+  const rows = [];
+  for (const w of made) {
+    if (w === "ec") continue;
+    const madeHere = r.produced[w] || 0, usedHere = r.consumed[w] || 0;
+    const t = calc.totals[w] || { produced: madeHere, consumed: usedHere };
+    const madeElsewhere = t.produced - madeHere, usedElsewhere = t.consumed - usedHere;
+    rows.push({ w, madeHere, usedHere, madeElsewhere, usedElsewhere, netChain: t.produced - t.consumed,
+                extDemand: Math.max(0, usedElsewhere - madeElsewhere) });
+  }
+  rows.sort((a, b) => a.netChain - b.netChain);
+  return { rows, made };
+}
+function importsFor(r, made) {
+  const list = [];
+  for (const w of Object.keys(r.consumed)) {
+    if (WARES[w]?.raw || w === "ec" || made.has(w)) continue;
+    if (r.consumed[w] > 0.5) list.push({ w, amt: r.consumed[w] });
+  }
+  return list.sort((a, b) => b.amt - a.amt);
+}
+function rawsFor(r) {
+  const list = [];
+  for (const w of Object.keys(r.consumed)) if (WARES[w]?.raw) list.push({ w, amt: r.consumed[w] });
+  return list.sort((a, b) => b.amt - a.amt);
+}
+function globalLists(calc) {
+  const flows = [], shipFab = [], deficits = [], raws = {};
+  for (const [w, t] of Object.entries(calc.totals)) {
+    const consumers = [], producers = [];
+    for (const [sid, n] of Object.entries(t.perStation)) {
+      if (n < -0.5) consumers.push({ sid, amt: -n });
+      else if (n > 0.5) producers.push({ sid, amt: n });
+    }
+    if (consumers.length && producers.length) flows.push({ w, consumers, producers });
+    const net = t.produced - t.consumed;
+    if (END_WARES.has(w) && (net > 0.5 || t.produced > 0)) shipFab.push({ w, produced: t.produced, consumed: t.consumed, net });
+    if (!WARES[w]?.raw && net < -0.5) deficits.push({ w, net, t });
+  }
+  for (const s of state.stations) {
+    const r = calc.perStation[s.id];
+    for (const w of Object.keys(r.consumed)) if (WARES[w]?.raw) raws[w] = (raws[w] || 0) + r.consumed[w];
+  }
+  shipFab.sort((a, b) => b.net - a.net);
+  deficits.sort((a, b) => a.net - b.net);
+  const ecRows = state.stations.map(s => {
+    const r = calc.perStation[s.id];
+    const prod = r.produced.ec || 0, used = r.consumed.ec || 0;
+    return { s, prod, used, net: prod - used };
+  });
+  return { flows, shipFab, deficits, ecRows, rawList: Object.entries(raws).sort((a, b) => b[1] - a[1]) };
+}
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+function fmt(n) {
+  if (n === 0) return "0";
+  if (Math.abs(n) < 1) return n.toFixed(2);
+  if (Math.abs(n) >= 1000) return Math.round(n).toLocaleString();
+  return n.toFixed(0);
+}
+function signed(n) { return (n >= 0 ? "+" : "") + fmt(n); }
+function netClass(n) {
+  if (n > 0.5) return "pos";
+  if (n < -0.5) return "neg";
+  return "neutral";
+}
+function wname(id) { return WARES[id]?.name || id; }
+function shortName(id) { return (WARES[id]?.name || id).replace(/\s*\(.*\)$/, ""); }
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function whoConsumes(wareId, excludeStationId, calc) {
+  const t = calc?.totals?.[wareId];
+  if (!t) return [];
+  const list = [];
+  for (const [sid, net] of Object.entries(t.perStation)) {
+    if (sid === excludeStationId) continue;
+    if (net < -0.5) list.push({ id: sid, amt: -net });
+  }
+  return list.sort((a, b) => b.amt - a.amt);
+}
+function whoProduces(wareId, excludeStationId) {
+  const list = [];
+  for (const s of state.stations) {
+    if (s.id === excludeStationId) continue;
+    if (s.modules.some(m => m.count > 0 && outputsOf(m.wareId)[wareId] !== undefined)) list.push(s.id);
+  }
+  return list;
+}
+function alloNeeded(wareId, qty) {
+  const p = WARES[wareId]?.price || 0;
+  return Math.ceil((qty * p) / ALLO_PRICE);
+}
+function alloList() {
+  return Object.entries(WARES)
+    .filter(([id, w]) => !w.raw && w.price && id !== "allographyne" && id !== "terranEC" && !w.processor && !w.outputs)
+    .sort((a, b) => a[1].price - b[1].price);
+}
+// <details> whose open state survives re-renders
+function det(key, defOpen) { const o = ui.open[key]; return (o === undefined ? defOpen : o) ? "open" : ""; }
+function uiToggle(el) { ui.open[el.dataset.k] = el.open; saveUI(); }
+
+// =============================================================================
+// VIEW SWITCHING
+// =============================================================================
+const MOBILE_MQ = window.matchMedia("(max-width: 760px), (hover: none) and (pointer: coarse) and (max-width: 1100px)");
+function isMobile() { return ui.view === "mobile" || (ui.view !== "desktop" && MOBILE_MQ.matches); }
+function setView(v) { ui.view = v; saveUI(); render(); }
+if (MOBILE_MQ.addEventListener) MOBILE_MQ.addEventListener("change", () => render());
+else if (MOBILE_MQ.addListener) MOBILE_MQ.addListener(() => render());
+
+function render() {
+  saveState();
+  const calc = calcGlobal();
+  const mobile = isMobile();
+  document.documentElement.classList.toggle("mobile", mobile);
+  if (mobile) renderMobile(calc);
+  else {
+    const sel = document.querySelector("#desktop .toolbar select");
+    if (sel) sel.value = ui.view;
+    document.getElementById("kp-toggle").checked = state.profile === "kingpin";
+    renderStations(calc);
+    renderGlobals(calc);
+  }
+}
+
+// =============================================================================
+// DESKTOP RENDER
+// =============================================================================
+function renderStations(calc) {
+  const root = document.getElementById("stations");
+  root.innerHTML = "";
+  state.stations.forEach((station, idx) => {
+    const r = calc.perStation[station.id];
+    const card = document.createElement("div");
+    const { shortWares, ecShort, any } = stationIssues(station, calc);
+    card.className = "station" + (any ? " short" : "");
+    const totalModules = station.modules.reduce((a, m) => a + (m.count || 0), 0);
+    const types = station.modules.filter(m => m.count > 0).length;
+    const banner = any ? `
+      <div class="chain-short-banner">
+        ⚠ chain shortage:
+        ${shortWares.map(s => `${escapeHTML(shortName(s.w))} −${fmt(s.short)}/hr`).join(" · ")}
+        ${ecShort > 0.5 ? `${shortWares.length ? " · " : ""}EC −${fmt(ecShort)}/hr` : ""}
+      </div>
+    ` : "";
+    card.innerHTML = `
+      <div class="station-header">
+        <div>
+          <div class="station-title">${escapeHTML(station.name)}</div>
+          <div class="station-sub">${types} types, ${totalModules} modules${types > 7 ? ' <span class="warn">(over 7 types)</span>' : ""} · ${escapeHTML(station.note || "")}</div>
+        </div>
+        <div class="sunlight">
+          <label>☀ <input type="number" min="0" max="1500" step="1"
+            value="${Math.round((station.sunlight ?? 1.0) * 100)}"
+            onchange="setSunlight(${idx}, this.value / 100)"> %</label>
+        </div>
+      </div>
+      ${banner}
+      <div class="station-body">
+        ${(() => { const pk = locationPicker(station, idx, false); return `<div class="add-module" style="margin:0 0 4px">${pk.sel}</div>${pk.details}`; })()}
+        <table class="modules-table">
+          <thead>
+            <tr>
+              <th>Module</th>
+              <th class="center">Count</th>
+              <th class="right">Produces /hr</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${station.modules.map((m, mi) => renderModuleRow(idx, m, mi, r.rows[mi])).join("")}</tbody>
+        </table>
+        ${renderAddModule(idx, station)}
+        ${renderStationSummary(station, r, calc)}
+      </div>
+    `;
+    root.appendChild(card);
+  });
+}
+
+function moduleProdText(ware, row) {
+  const outs = Object.entries(row?.produced || {});
+  return outs.length > 1
+    ? outs.map(([o, v]) => `${fmt(v)} ${escapeHTML(shortName(o))}`).join(" + ")
+    : fmt(outs.length ? outs[0][1] : 0);
+}
+function utilPill(ware, row) {
+  return row && row.util < 0.995 && ware.processor
+    ? ` <span class="pill" title="Processor runs only as fast as this station uses its output">${Math.round(row.util * 100)} %</span>` : "";
+}
+
+function renderModuleRow(sIdx, m, mIdx, row) {
+  const ware = WARES[m.wareId];
+  if (!ware) return "";
+  return `
+    <tr>
+      <td>${escapeHTML(ware.name)}</td>
+      <td class="center"><input type="number" min="0" step="1" value="${m.count}"
+        onchange="setCount(${sIdx}, ${mIdx}, this.value)"></td>
+      <td class="right num pos">${moduleProdText(ware, row)}${utilPill(ware, row)}</td>
+      <td><button class="delete-btn" title="Remove" onclick="removeModule(${sIdx}, ${mIdx})">✕</button></td>
+    </tr>
+  `;
+}
+
+function addOptions(station) {
+  const usedIds = new Set(station.modules.map(m => m.wareId));
+  return Object.entries(WARES)
+    .filter(([id, w]) => !w.raw && !usedIds.has(id))
+    .map(([id, w]) => `<option value="${id}">${escapeHTML(w.name)}</option>`)
+    .join("");
+}
+function renderAddModule(sIdx, station) {
+  const opts = addOptions(station);
+  if (!opts) return "";
+  return `
+    <div class="add-module">
+      <select id="add-${sIdx}"><option value="">+ Add module type…</option>${opts}</select>
+      <button onclick="addModule(${sIdx})">Add</button>
+    </div>
+  `;
+}
+
+function renderStationSummary(station, r, calc) {
+  const { rows: productionRows, made } = productionRowsFor(station, r, calc);
+  const imports = importsFor(r, made);
+  const raws = rawsFor(r);
+  const ecProduced = r.produced.ec || 0, ecConsumed = r.consumed.ec || 0, ecNet = ecProduced - ecConsumed;
+  return `
+    <div class="summary-block">
+      <h3>Energy</h3>
+      <div class="ware-line">
+        <span class="label">Energy Cells (sunlight ${Math.round((station.sunlight ?? 1.0) * 100)}%)</span>
+        <span class="num ${netClass(ecNet)}">
+          ${fmt(ecProduced)} prod − ${fmt(ecConsumed)} use = ${signed(ecNet)}/hr
+        </span>
+      </div>
+
+      ${productionRows.length ? `
+        <h3>Production vs chain demand</h3>
+        <table class="ware-table chain-table">
+          <thead><tr>
+            <th>Ware</th>
+            <th class="right" title="Produced at this station">Made here</th>
+            <th class="right" title="Consumed at this station">Used here</th>
+            <th class="right" title="Demand from other stations not covered by their own production">Ext. demand</th>
+            <th class="right" title="Total chain production minus total chain consumption">Chain net</th>
+          </tr></thead>
+          <tbody>${productionRows.map(p => {
+            const consumers = whoConsumes(p.w, station.id, calc);
+            const otherProducers = whoProduces(p.w, station.id);
+            return `
+            <tr>
+              <td>
+                ${escapeHTML(shortName(p.w))}
+                ${END_WARES.has(p.w) ? '<span class="pill">→ Ship Fab</span>' : ""}
+                ${otherProducers.length ? `<span class="pill">+ ${otherProducers.join(", ")}</span>` : ""}
+                ${consumers.length ? `<div class="station-sub">→ ${consumers.map(c => `${c.id}: ${fmt(c.amt)}/hr`).join(", ")}</div>` : ""}
+              </td>
+              <td class="right num">${fmt(p.madeHere)}</td>
+              <td class="right num neutral">${fmt(p.usedHere)}</td>
+              <td class="right num ${p.extDemand > 0.5 ? "warn" : "neutral"}">${fmt(p.extDemand)}</td>
+              <td class="right num ${netClass(p.netChain)}"><b>${signed(p.netChain)}</b></td>
+            </tr>`;
+          }).join("")}</tbody>
+        </table>
+      ` : ""}
+
+      ${imports.length ? `
+        <h3>Imports needed (per hour)</h3>
+        ${imports.map(i => {
+          const sources = whoProduces(i.w, station.id);
+          const t = calc.totals[i.w];
+          const chainShort = t && (t.produced - t.consumed) < -0.5;
+          return `<div class="ware-line">
+            <span class="label">
+              ${escapeHTML(shortName(i.w))}
+              ${sources.length ? `<span class="pill">from ${sources.join(", ")}</span>` : `<span class="pill" style="color:var(--bad)">no producer</span>`}
+              ${chainShort ? `<span class="pill" style="color:var(--bad)">chain short ${fmt(t.consumed - t.produced)}/hr</span>` : ""}
+            </span>
+            <span class="num neg">−${fmt(i.amt)}</span>
+          </div>`;
+        }).join("")}
+      ` : ""}
+
+      ${raws.length ? `
+        <h3>Raw inputs (mining /hr)</h3>
+        ${raws.map(rr => `<div class="ware-line">
+          <span class="label raw">${escapeHTML(wname(rr.w))}</span>
+          <span class="num raw">${fmt(rr.amt)}</span>
+        </div>`).join("")}
+      ` : ""}
+    </div>
+  `;
+}
+
+function panel(html, cls = "") {
+  const p = document.createElement("div");
+  p.className = "global-panel " + cls;
+  p.innerHTML = html;
+  document.getElementById("globals").appendChild(p);
+  return p;
+}
+
+function renderGlobals(calc) {
+  document.getElementById("globals").innerHTML = "";
+  const g = globalLists(calc);
+
+  renderAllographyne(calc);
+
+  if (g.flows.length) panel(`
+    <h2>Cross-station flows</h2>
+    <table class="ware-table">
+      <thead><tr><th>Ware</th><th>From</th><th>To</th><th class="right">/hr</th></tr></thead>
+      <tbody>${g.flows.map(f => f.consumers.map(c => `
+        <tr>
+          <td>${escapeHTML(shortName(f.w))}</td>
+          <td>${f.producers.map(p => p.sid).join("/")}</td>
+          <td>${c.sid}</td>
+          <td class="right num">${fmt(c.amt)}</td>
+        </tr>`).join("")).join("")}</tbody>
+    </table>`);
+
+  if (g.shipFab.length) panel(`
+    <h2>End wares → Ship Fab</h2>
+    <table class="ware-table">
+      <thead><tr><th>Ware</th><th class="right">Made</th><th class="right">Used</th><th class="right">Surplus</th><th class="right" title="Surplus × 9.00 average price">Cr/hr</th></tr></thead>
+      <tbody>${g.shipFab.map(s => `
+        <tr>
+          <td>${escapeHTML(shortName(s.w))}</td>
+          <td class="right num">${fmt(s.produced)}</td>
+          <td class="right num neutral">${fmt(s.consumed)}</td>
+          <td class="right num ${netClass(s.net)}">${signed(s.net)}</td>
+          <td class="right num neutral">${fmt(s.net * (WARES[s.w]?.price || 0))}</td>
+        </tr>`).join("")}</tbody>
+    </table>`);
+
+  if (g.deficits.length) panel(`
+    <h2 style="color:var(--bad)">⚠ Global deficits</h2>
+    <div class="station-sub" style="margin-bottom:6px">Total demand exceeds total production. Add more producer modules.</div>
+    <table class="ware-table">
+      <thead><tr><th>Ware</th><th class="right">Made</th><th class="right">Used</th><th class="right">Short</th></tr></thead>
+      <tbody>${g.deficits.map(d => `
+        <tr>
+          <td>${escapeHTML(shortName(d.w))}</td>
+          <td class="right num">${fmt(d.t.produced)}</td>
+          <td class="right num">${fmt(d.t.consumed)}</td>
+          <td class="right num neg">${fmt(d.net)}</td>
+        </tr>`).join("")}</tbody>
+    </table>`, "bad");
+
+  panel(`
+    <h2>Energy balance per station</h2>
+    <table class="ware-table">
+      <thead><tr><th>Station</th><th class="right">☀</th><th class="right">Made</th><th class="right">Used</th><th class="right">Net</th></tr></thead>
+      <tbody>${g.ecRows.map(r => `
+        <tr>
+          <td>${escapeHTML(r.s.id)}</td>
+          <td class="right num neutral">${Math.round((r.s.sunlight ?? 1) * 100)}%</td>
+          <td class="right num">${fmt(r.prod)}</td>
+          <td class="right num neutral">${fmt(r.used)}</td>
+          <td class="right num ${netClass(r.net)}">${signed(r.net)}</td>
+        </tr>`).join("")}</tbody>
+    </table>
+    <div class="station-sub">9.00 equipment needs far more EC at the shipyard (TER L Mk3 shield: 5,286 EC; ARG M Flak: 135 EC). Give the shipyard its own solar modules.</div>`,
+    g.ecRows.some(r => r.net < -0.5) ? "warn" : "");
+
+  if (g.rawList.length) panel(`
+    <h2>Total mining demand</h2>
+    <table class="ware-table">
+      <thead><tr><th>Resource</th><th class="right">Per hour</th></tr></thead>
+      <tbody>${g.rawList.map(([w, amt]) => `
+        <tr>
+          <td class="raw">${escapeHTML(wname(w))}</td>
+          <td class="right num raw">${fmt(amt)}</td>
+        </tr>`).join("")}</tbody>
+    </table>`);
+
+  renderFieldTables();
+}
+
+function alloStats(calc) {
+  const t = calc.totals.allographyne || { produced: 0, consumed: 0 };
+  const alloHr = t.produced - t.consumed;
+  return { alloHr, valueHr: alloHr * ALLO_PRICE };
+}
+function alloOptions() {
+  return alloList().map(([id]) => `<option value="${id}" ${id === alloCalc.wareId ? "selected" : ""}>${escapeHTML(shortName(id))}</option>`).join("");
+}
+
+function renderAllographyne(calc) {
+  const { alloHr, valueHr } = alloStats(calc);
+  const list = alloList();
+  const need = alloNeeded(alloCalc.wareId, alloCalc.qty);
+  panel(`
+    <h2>Allographyne at the shipyard</h2>
+    <div class="station-sub" style="margin-bottom:6px">
+      When a build is missing wares, the shipyard spends its own Allographyne instead:
+      <code>ceil(missing qty × avg price / ${ALLO_PRICE.toLocaleString()})</code>. It only fills gaps (it never replaces wares that are in stock), and only stock held by the building station counts.
+      Allow it under the station's <b>Allographyne Usage</b> trade rule.
+    </div>
+    <div class="ware-line"><span class="label">Allographyne made</span><span class="num big">${fmt(alloHr)}/hr</span></div>
+    <div class="ware-line"><span class="label">Missing-ware value it can cover</span><span class="num big">${fmt(valueHr)} Cr/hr</span></div>
+    <div class="ware-line"><span class="label">Market value of its inputs (300 Fragments + 200 Nividium + 6,000 EC per 100)</span><span class="num warn">≈ 2,640 Cr per Allographyne</span></div>
+    <div class="station-sub">At market prices, Allographyne is worth about half of what goes into it. It pays off with self-mined Nividium and scrap, or as a way to keep stalled builds moving.</div>
+    <div class="station-sub" style="color:var(--text-dim);margin-top:4px">🛒 ${BLUEPRINT_NOTE}</div>
+    <div class="calc-row">
+      Missing
+      <input type="number" min="0" step="1" value="${alloCalc.qty}" onchange="setAlloCalc(null, this.value)">
+      <select onchange="setAlloCalc(this.value, null)">${alloOptions()}</select>
+      → <span class="big">${fmt(need)}</span> Allographyne
+    </div>
+    <details data-k="d-allo-ex" ${det("d-allo-ex", false)} ontoggle="uiToggle(this)">
+      <summary>Exchange table (9.00 average prices)</summary>
+      <table class="ware-table">
+        <thead><tr><th>Ware</th><th class="right">Avg Cr</th><th class="right" title="${ALLO_PRICE} / price">per 1 Allo</th><th class="right" title="ceil(100 × price / ${ALLO_PRICE})">Allo per 100</th><th class="right" title="Units per hour the current Allographyne output could stand in for">covers /hr</th></tr></thead>
+        <tbody>${list.map(([id, w]) => `
+          <tr>
+            <td>${escapeHTML(shortName(id))}</td>
+            <td class="right num">${fmt(w.price)}</td>
+            <td class="right num">${(ALLO_PRICE / w.price).toFixed(2)}</td>
+            <td class="right num">${fmt(alloNeeded(id, 100))}</td>
+            <td class="right num neutral">${fmt(valueHr / w.price)}</td>
+          </tr>`).join("")}</tbody>
+      </table>
+    </details>`);
+}
+
+function renderFieldTables() {
+  panel(`
+    <h2>Raw Kha'ak scrap fields (9.00 map data)</h2>
+    <div class="station-sub" style="margin-bottom:6px">Every sector with a raw Kha'ak scrap field. Destroyed Kha'ak S/M ships also leave recyclable wrecks (your miner pickets make these).</div>
+    <div class="scroll-x"><table class="ware-table">
+      <thead><tr><th>Sector</th><th class="right">☀</th><th>Kha'ak scrap fields</th><th>Also there</th></tr></thead>
+      <tbody>${KHAAK_FIELDS.map(f => `
+        <tr>
+          <td><b>${escapeHTML(f.sector)}</b><div class="station-sub">${escapeHTML(f.src)}</div></td>
+          <td class="right num">${Math.round(f.sun * 100)}%</td>
+          <td class="wrap">${escapeHTML(f.fields)}${f.note ? `<div class="station-sub warn">${escapeHTML(f.note)}</div>` : ""}</td>
+          <td class="wrap">${escapeHTML(f.also)}</td>
+        </tr>`).join("")}</tbody>
+    </table></div>`, "wide");
+  panel(`
+    <h2>Nividium for S7</h2>
+    <div class="station-sub" style="margin-bottom:6px">One Kha'ak Scrap Recycler uses 2,400 Nividium/hr at full speed. Field size and regrow time from the 9.00 data.</div>
+    <div class="scroll-x"><table class="ware-table">
+      <thead><tr><th>Sector</th><th class="right">☀</th><th>Nividium fields</th><th>Note</th></tr></thead>
+      <tbody>${nividiumRows().map(f => `
+        <tr>
+          <td><b>${escapeHTML(f.sector)}</b></td>
+          <td class="right num">${Math.round(f.sun * 100)}%</td>
+          <td class="wrap">${escapeHTML(f.fields)}</td>
+          <td class="wrap">${escapeHTML(f.note)}</td>
+        </tr>`).join("")}</tbody>
+    </table></div>`, "wide");
+}
+
+// =============================================================================
+// MOBILE RENDER
+// =============================================================================
+const M_TABS = [
+  { id: "stations", ico: "▦", label: "Stations" },
+  { id: "totals",   ico: "Σ", label: "Totals" },
+  { id: "allo",     ico: "◈", label: "Allographyne" },
+  { id: "info",     ico: "ⓘ", label: "Info" },
+];
+
+function renderMobile(calc) {
+  if (!M_TABS.some(t => t.id === ui.tab)) ui.tab = "stations";
+  ui.station = Math.min(Math.max(0, ui.station | 0), state.stations.length - 1);
+  const head = document.getElementById("m-head");
+  const main = document.getElementById("m-main");
+  const tabTitle = M_TABS.find(t => t.id === ui.tab).label;
+
+  head.innerHTML = `
+    <div class="m-titlebar">
+      <div class="m-title">${ui.tab === "stations" ? "X4 Station Planner" : escapeHTML(tabTitle)}<small>9.00</small></div>
+      <button class="m-chip ${state.profile === "kingpin" ? "on" : ""}" style="padding:5px 10px;font-size:12px"
+        onclick="setProfile('${state.profile === "kingpin" ? "vanilla" : "kingpin"}')"
+        aria-label="Toggle Nopileos Kingpin mod">Kingpin mod: ${state.profile === "kingpin" ? "On" : "Off"}</button>
+    </div>
+    ${ui.tab === "stations" ? `<div class="m-chips" id="m-chips">${state.stations.map((s, i) => {
+      const iss = stationIssues(s, calc);
+      return `<button class="m-chip ${i === ui.station ? "on" : ""} ${iss.any ? "short" : ""}" onclick="mStation(${i})">${escapeHTML(s.id)}${iss.any ? " ⚠" : ""}</button>`;
+    }).join("")}</div>` : ""}`;
+
+  if (ui.tab === "stations") main.innerHTML = mStationView(calc);
+  else if (ui.tab === "totals") main.innerHTML = mTotalsView(calc);
+  else if (ui.tab === "allo") main.innerHTML = mAlloView(calc);
+  else main.innerHTML = mInfoView();
+
+  document.getElementById("m-tabbar").innerHTML = M_TABS.map(t =>
+    `<button class="${t.id === ui.tab ? "on" : ""}" onclick="mTab('${t.id}')"><span class="ico">${t.ico}</span>${t.label}</button>`).join("");
+
+  const on = head.querySelector(".m-chip.on");
+  if (on) {
+    const chips = document.getElementById("m-chips");
+    chips.scrollLeft = on.offsetLeft - (chips.clientWidth - on.offsetWidth) / 2;
+  }
+}
+
+function mStationView(calc) {
+  const idx = ui.station;
+  const station = state.stations[idx];
+  const r = calc.perStation[station.id];
+  const { shortWares, ecShort, any } = stationIssues(station, calc);
+  const totalModules = station.modules.reduce((a, m) => a + (m.count || 0), 0);
+  const types = station.modules.filter(m => m.count > 0).length;
+  const sunPct = Math.round((station.sunlight ?? 1) * 100);
+  const ecP = r.produced.ec || 0, ecU = r.consumed.ec || 0, ecNet = ecP - ecU;
+  const { rows: prodRows, made } = productionRowsFor(station, r, calc);
+  const imports = importsFor(r, made);
+  const raws = rawsFor(r);
+  const k = station.id;
+  const prev = state.stations[(idx - 1 + state.stations.length) % state.stations.length];
+  const next = state.stations[(idx + 1) % state.stations.length];
+
+  return `
+  <div class="m-card ${any ? "short" : ""}">
+    <div class="m-name">${escapeHTML(station.name)}</div>
+    ${(() => { const pk = locationPicker(station, idx, true); return `<div style="margin:8px 0 2px">${pk.sel}</div>${pk.cur ? `<div class="m-sub" style="padding-top:4px">⛏ ${escapeHTML(pk.cur.res)}</div>` : ""}${pk.details}`; })()}
+    <div class="m-sub">${types} types · ${totalModules} modules${types > 7 ? ' · <span class="warn">over 7 types</span>' : ""}</div>
+    ${station.note ? `<details class="m-note" data-k="m-note-${k}" ${det("m-note-" + k, false)} ontoggle="uiToggle(this)">
+      <summary>About this station</summary><div class="m-note-text">${escapeHTML(station.note)}</div></details>` : ""}
+    ${any ? `<div class="m-banner">⚠ ${shortWares.map(s => `${escapeHTML(shortName(s.w))} short ${fmt(s.short)}/hr`).join(" · ")}${ecShort > 0.5 ? `${shortWares.length ? " · " : ""}EC short ${fmt(ecShort)}/hr` : ""}</div>` : ""}
+    <div class="m-row">
+      <div class="grow"><div class="t">☀ Sunlight</div><div class="s">multiplies solar modules only</div></div>
+      <div class="stepper">
+        <button onclick="stepSun(${idx}, -5)" aria-label="Less sunlight">−</button>
+        <input type="number" inputmode="numeric" min="0" max="1500" value="${sunPct}" onchange="setSunlight(${idx}, this.value / 100)">
+        <button onclick="stepSun(${idx}, 5)" aria-label="More sunlight">+</button>
+      </div>
+    </div>
+    <div class="m-kv"><span class="k">Energy Cells</span><span class="v ${netClass(ecNet)}"><b>${signed(ecNet)}/hr</b></span></div>
+    <div class="m-sub" style="text-align:right">${fmt(ecP)} made − ${fmt(ecU)} used</div>
+  </div>
+
+  <div class="m-card">
+    <h2>Modules</h2>
+    ${station.modules.map((m, mi) => {
+      const w = WARES[m.wareId];
+      if (!w) return "";
+      const row = r.rows[mi];
+      const util = row && w.processor && row.util < 0.995 ? ` · runs at ${Math.round(row.util * 100)} %` : "";
+      const nm = escapeHTML(w.name).replace(/\s*\((.*)\)$/, ' <span class="m-sub">($1)</span>');
+      return `<div class="m-row">
+        <div class="grow"><div class="t">${nm}</div><div class="s"><span class="pos">${moduleProdText(w, row)}/hr</span>${util}</div></div>
+        <div class="stepper">
+          <button onclick="stepCount(${idx}, ${mi}, -1)" aria-label="One less">−</button>
+          <input type="number" inputmode="numeric" min="0" value="${m.count}" onchange="setCount(${idx}, ${mi}, this.value)">
+          <button onclick="stepCount(${idx}, ${mi}, 1)" aria-label="One more">+</button>
+        </div>
+        <button class="m-x" onclick="mRemove(${idx}, ${mi})" aria-label="Remove module">✕</button>
+      </div>`;
+    }).join("")}
+    ${addOptions(station) ? `<div class="m-add"><select id="m-add-${idx}"><option value="">+ Add module type…</option>${addOptions(station)}</select><button onclick="mAddModule(${idx})">Add</button></div>` : ""}
+
+    ${prodRows.length ? `<details class="m-sec" data-k="m-chain-${k}" ${det("m-chain-" + k, any)} ontoggle="uiToggle(this)">
+      <summary>Production vs chain demand <span class="cnt">${prodRows.length}</span></summary>
+      ${prodRows.map(p => {
+        const consumers = whoConsumes(p.w, station.id, calc);
+        return `<div class="m-row">
+          <div class="grow"><div class="t">${escapeHTML(shortName(p.w))}${END_WARES.has(p.w) ? ' <span class="pill">→ Ship Fab</span>' : ""}</div>
+            <div class="s">made ${fmt(p.madeHere)} · used here ${fmt(p.usedHere)}${p.extDemand > 0.5 ? ` · <span class="warn">others need ${fmt(p.extDemand)}</span>` : ""}</div>
+            ${consumers.length ? `<div class="s">→ ${consumers.map(c => `${c.id} ${fmt(c.amt)}`).join(", ")}</div>` : ""}</div>
+          <div class="r ${netClass(p.netChain)}"><b>${signed(p.netChain)}</b><div class="s">chain net</div></div>
+        </div>`;
+      }).join("")}
+    </details>` : ""}
+
+    ${imports.length ? `<details class="m-sec" data-k="m-imp-${k}" ${det("m-imp-" + k, false)} ontoggle="uiToggle(this)">
+      <summary>Imports needed <span class="cnt">${imports.length}</span></summary>
+      ${imports.map(i => {
+        const sources = whoProduces(i.w, station.id);
+        const t = calc.totals[i.w];
+        const chainShort = t && (t.produced - t.consumed) < -0.5;
+        return `<div class="m-row">
+          <div class="grow"><div class="t">${escapeHTML(shortName(i.w))}</div>
+            <div class="s">${sources.length ? "from " + sources.join(", ") : '<span class="neg">no producer</span>'}${chainShort ? ` · <span class="neg">chain short ${fmt(t.consumed - t.produced)}</span>` : ""}</div></div>
+          <div class="r neg">−${fmt(i.amt)}</div>
+        </div>`;
+      }).join("")}
+    </details>` : ""}
+
+    ${raws.length ? `<details class="m-sec" data-k="m-raw-${k}" ${det("m-raw-" + k, false)} ontoggle="uiToggle(this)">
+      <summary>Raw inputs (mining /hr) <span class="cnt">${raws.length}</span></summary>
+      ${raws.map(rr => `<div class="m-kv"><span class="k raw">${escapeHTML(wname(rr.w))}</span><span class="v raw">${fmt(rr.amt)}</span></div>`).join("")}
+    </details>` : ""}
+  </div>
+
+  <div class="m-nav">
+    <button onclick="mStation(${(idx - 1 + state.stations.length) % state.stations.length})">‹ ${escapeHTML(prev.id)}</button>
+    <button onclick="mStation(${(idx + 1) % state.stations.length})">${escapeHTML(next.id)} ›</button>
+  </div>
+  <div class="m-sub" style="text-align:center">Swipe left or right to change station.</div>`;
+}
+
+function mTotalsView(calc) {
+  const g = globalLists(calc);
+  return `
+  ${g.deficits.length ? `<div class="m-card bad">
+    <details class="m-sec" style="border:none;margin:0" data-k="m-tot-def" ${det("m-tot-def", true)} ontoggle="uiToggle(this)">
+      <summary><span class="neg">⚠ Global deficits</span><span class="cnt">${g.deficits.length}</span></summary>
+      ${g.deficits.map(d => `<div class="m-row"><div class="grow"><div class="t">${escapeHTML(shortName(d.w))}</div>
+        <div class="s">made ${fmt(d.t.produced)} · used ${fmt(d.t.consumed)}</div></div><div class="r neg"><b>${fmt(d.net)}</b></div></div>`).join("")}
+    </details></div>` : ""}
+
+  <div class="m-card">
+    <details class="m-sec" style="border:none;margin:0" data-k="m-tot-end" ${det("m-tot-end", true)} ontoggle="uiToggle(this)">
+      <summary>End wares → shipyard <span class="cnt">${g.shipFab.length}</span></summary>
+      ${g.shipFab.map(s => `<div class="m-row"><div class="grow"><div class="t">${escapeHTML(shortName(s.w))}</div>
+        <div class="s">made ${fmt(s.produced)} · used ${fmt(s.consumed)} · ${fmt(s.net * (WARES[s.w]?.price || 0))} Cr/hr</div></div>
+        <div class="r ${netClass(s.net)}"><b>${signed(s.net)}</b></div></div>`).join("")}
+    </details>
+  </div>
+
+  <div class="m-card">
+    <details class="m-sec" style="border:none;margin:0" data-k="m-tot-ec" ${det("m-tot-ec", false)} ontoggle="uiToggle(this)">
+      <summary>Energy per station <span class="cnt">${g.ecRows.some(r => r.net < -0.5) ? '<span class="neg">short</span>' : "ok"}</span></summary>
+      ${g.ecRows.map(r => `<div class="m-row"><div class="grow"><div class="t">${escapeHTML(r.s.id)} <span class="m-sub">☀ ${Math.round((r.s.sunlight ?? 1) * 100)}%</span></div>
+        <div class="s">made ${fmt(r.prod)} · used ${fmt(r.used)}</div></div><div class="r ${netClass(r.net)}"><b>${signed(r.net)}</b></div></div>`).join("")}
+      <div class="m-sub" style="padding-top:6px">9.00 equipment needs far more EC at the shipyard; S7's spare EC covers part of it.</div>
+    </details>
+  </div>
+
+  <div class="m-card">
+    <details class="m-sec" style="border:none;margin:0" data-k="m-tot-flow" ${det("m-tot-flow", false)} ontoggle="uiToggle(this)">
+      <summary>Cross-station flows <span class="cnt">${g.flows.reduce((a, f) => a + f.consumers.length, 0)}</span></summary>
+      ${g.flows.map(f => f.consumers.map(c => `<div class="m-row"><div class="grow"><div class="t">${escapeHTML(shortName(f.w))}</div>
+        <div class="s">${f.producers.map(p => p.sid).join("/")} → ${c.sid}</div></div><div class="r">${fmt(c.amt)}/hr</div></div>`).join("")).join("")}
+    </details>
+  </div>
+
+  <div class="m-card">
+    <details class="m-sec" style="border:none;margin:0" data-k="m-tot-raw" ${det("m-tot-raw", false)} ontoggle="uiToggle(this)">
+      <summary>Total mining demand <span class="cnt">${g.rawList.length}</span></summary>
+      ${g.rawList.map(([w, amt]) => `<div class="m-kv"><span class="k raw">${escapeHTML(wname(w))}</span><span class="v raw">${fmt(amt)}/hr</span></div>`).join("")}
+    </details>
+  </div>`;
+}
+
+function mAlloView(calc) {
+  const { alloHr, valueHr } = alloStats(calc);
+  const need = alloNeeded(alloCalc.wareId, alloCalc.qty);
+  return `
+  <div class="m-card">
+    <div class="m-kv"><span class="k">Allographyne made</span><span class="m-big">${fmt(alloHr)}/hr</span></div>
+    <div class="m-kv"><span class="k">Missing-ware value covered</span><span class="v"><b>${fmt(valueHr)} Cr/hr</b></span></div>
+    <details class="m-note" data-k="m-allo-how" ${det("m-allo-how", false)} ontoggle="uiToggle(this)">
+      <summary>How it works</summary>
+      <div class="m-note-text">When a build is missing wares, the shipyard spends its own Allographyne instead:
+        <code>ceil(missing qty × avg price / 1,400)</code>. It only fills gaps, and only stock held by the building station counts.
+        Allow it under the station's <b>Allographyne Usage</b> trade rule.<br><br>
+        Its inputs are worth about 2,640 Cr per Allographyne at market prices (300 Fragments + 200 Nividium + 6,000 EC per 100), so it pays off with self-mined Nividium and scrap, or to keep stalled builds moving.</div>
+    </details>
+    <div class="m-note-text" style="padding-top:8px">🛒 ${BLUEPRINT_NOTE}</div>
+  </div>
+
+  <div class="m-card">
+    <h2>Calculator</h2>
+    <div class="m-calc">
+      <div class="line">
+        <input type="number" inputmode="numeric" min="0" step="1" value="${alloCalc.qty}" onchange="setAlloCalc(null, this.value)" aria-label="Missing quantity">
+        <select onchange="setAlloCalc(this.value, null)" aria-label="Missing ware">${alloOptions()}</select>
+      </div>
+      <div class="m-kv"><span class="k">Allographyne needed</span><span class="m-big">${fmt(need)}</span></div>
+    </div>
+    <details class="m-sec" data-k="m-allo-ex" ${det("m-allo-ex", false)} ontoggle="uiToggle(this)">
+      <summary>Exchange table <span class="cnt">9.00 prices</span></summary>
+      ${alloList().map(([id, w]) => `<div class="m-row"><div class="grow"><div class="t">${escapeHTML(shortName(id))}</div>
+        <div class="s">${fmt(w.price)} Cr · covers ${fmt(valueHr / w.price)}/hr</div></div>
+        <div class="r">${(ALLO_PRICE / w.price).toFixed(2)} per Allo<div class="s">${fmt(alloNeeded(id, 100))} per 100</div></div></div>`).join("")}
+    </details>
+  </div>
+
+  <div class="m-card">
+    <details class="m-sec" style="border:none;margin:0" data-k="m-allo-kf" ${det("m-allo-kf", false)} ontoggle="uiToggle(this)">
+      <summary>Raw Kha'ak scrap fields <span class="cnt">${KHAAK_FIELDS.length}</span></summary>
+      ${KHAAK_FIELDS.map(f => `<div class="m-field"><div class="hd"><span>${escapeHTML(f.sector)}</span><span class="m-sub">☀ ${Math.round(f.sun * 100)}% · ${escapeHTML(f.src)}</span></div>
+        <div class="bd">${escapeHTML(f.fields)}</div><div class="bd">Also: ${escapeHTML(f.also)}</div>${f.note ? `<div class="bd warn">${escapeHTML(f.note)}</div>` : ""}</div>`).join("")}
+      <div class="m-sub" style="padding-top:6px">Destroyed Kha'ak S/M ships also leave recyclable wrecks.</div>
+    </details>
+  </div>
+
+  <div class="m-card">
+    <details class="m-sec" style="border:none;margin:0" data-k="m-allo-niv" ${det("m-allo-niv", false)} ontoggle="uiToggle(this)">
+      <summary>Nividium for S7 <span class="cnt">${nividiumRows().length}</span></summary>
+      ${nividiumRows().map(f => `<div class="m-field"><div class="hd"><span>${escapeHTML(f.sector)}</span><span class="m-sub">☀ ${Math.round(f.sun * 100)}%</span></div>
+        <div class="bd">${escapeHTML(f.fields)}</div>${f.note ? `<div class="bd">${escapeHTML(f.note)}</div>` : ""}</div>`).join("")}
+      <div class="m-sub" style="padding-top:6px">One Kha'ak Scrap Recycler uses 2,400 Nividium/hr at full speed.</div>
+    </details>
+  </div>`;
+}
+
+function mInfoView() {
+  const whatsnew = document.getElementById("whatsnew").innerHTML;
+  const how = document.getElementById("howitworks").innerHTML;
+  return `
+  <div class="m-card">
+    <h2>Game setup</h2>
+    <div class="m-seg">
+      <button class="${state.profile === "vanilla" ? "on" : ""}" onclick="setProfile('vanilla')">Vanilla</button>
+      <button class="${state.profile === "kingpin" ? "on" : ""}" onclick="setProfile('kingpin')">Kingpin mod</button>
+    </div>
+    <div class="m-sub" style="padding-top:6px">Vanilla puts S1–S5 in the Ore Belt hub. With the Nopileos Kingpin mod, Nopileos' Fortune II + VI have 250 % sun and extra resources, so S1–S4 and S6 move there. Each station also has 2–3 location options; picking one sets its sunlight and solar module count.</div>
+  </div>
+
+  <div class="m-card">
+    <h2>View</h2>
+    <div class="m-seg">
+      ${["auto", "mobile", "desktop"].map(v => `<button class="${ui.view === v ? "on" : ""}" onclick="setView('${v}')">${v[0].toUpperCase() + v.slice(1)}</button>`).join("")}
+    </div>
+    <div class="m-sub" style="padding-top:6px">Auto picks the mobile view on phone-sized screens.</div>
+  </div>
+
+  <div class="m-card">
+    <h2>Layout</h2>
+    <div class="m-btns">
+      <button onclick="exportState()">Export</button>
+      <button onclick="importState()">Import</button>
+      <button onclick="resetDefaults()">Reset</button>
+    </div>
+    <div class="m-sub" style="padding-top:6px">Saved on this device. Export / Import moves it between devices.</div>
+  </div>
+
+  <div class="m-card m-info">
+    <details class="m-sec" style="border:none;margin:0" data-k="m-info-new" ${det("m-info-new", false)} ontoggle="uiToggle(this)">
+      <summary>What changed in 9.00</summary>
+      <ul>${whatsnew}</ul>
+    </details>
+  </div>
+
+  <div class="m-card">
+    <details class="m-sec" style="border:none;margin:0" data-k="m-info-how" ${det("m-info-how", false)} ontoggle="uiToggle(this)">
+      <summary>How the numbers work</summary>
+      <div class="m-text">${how}</div>
+    </details>
+  </div>`;
+}
+
+// =============================================================================
+// MUTATORS
+// =============================================================================
+function setCount(sIdx, mIdx, value) {
+  state.stations[sIdx].modules[mIdx].count = Math.max(0, Math.floor(Number(value) || 0));
+  render();
+}
+function stepCount(sIdx, mIdx, d) {
+  const m = state.stations[sIdx].modules[mIdx];
+  m.count = Math.max(0, (m.count || 0) + d);
+  render();
+}
+function setSunlight(sIdx, value) {
+  state.stations[sIdx].sunlight = Math.max(0, Number(value) || 0);
+  render();
+}
+function stepSun(sIdx, d) {
+  const s = state.stations[sIdx];
+  s.sunlight = Math.max(0, Math.round((s.sunlight ?? 1) * 100 + d) / 100);
+  render();
+}
+function removeModule(sIdx, mIdx) {
+  state.stations[sIdx].modules.splice(mIdx, 1);
+  render();
+}
+function mRemove(sIdx, mIdx) {
+  const m = state.stations[sIdx].modules[mIdx];
+  if (confirm(`Remove ${shortName(m.wareId)} from ${state.stations[sIdx].id}?`)) removeModule(sIdx, mIdx);
+}
+function addModule(sIdx) {
+  const wareId = document.getElementById(`add-${sIdx}`).value;
+  if (!wareId) return;
+  state.stations[sIdx].modules.push({ wareId, count: 1 });
+  render();
+}
+function mAddModule(sIdx) {
+  const wareId = document.getElementById(`m-add-${sIdx}`).value;
+  if (!wareId) return;
+  state.stations[sIdx].modules.push({ wareId, count: 1 });
+  render();
+}
+function setAlloCalc(wareId, qty) {
+  if (wareId) alloCalc.wareId = wareId;
+  if (qty !== null && qty !== undefined) alloCalc.qty = Math.max(0, Math.floor(Number(qty) || 0));
+  render();
+}
+function mTab(id) { ui.tab = id; saveUI(); render(); window.scrollTo(0, 0); }
+function mStation(i) { ui.station = i; ui.tab = "stations"; saveUI(); render(); window.scrollTo(0, 0); }
+
+// Swipe left/right on the station view to change station
+(function () {
+  let x0 = null, y0 = null;
+  const main = document.getElementById("m-main");
+  main.addEventListener("touchstart", e => {
+    if (e.touches.length !== 1) { x0 = null; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+  }, { passive: true });
+  main.addEventListener("touchend", e => {
+    if (x0 === null || ui.tab !== "stations" || !isMobile()) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const n = state.stations.length;
+    mStation((ui.station + (dx < 0 ? 1 : -1) + n) % n);
+  }, { passive: true });
+})();
+
+// =============================================================================
+// INIT
+// =============================================================================
+// Links like #totals, #allo, #info or #stations-S3 open that mobile tab / station
+function applyHash() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (!h) return;
+  const [tab, st] = h.split("-");
+  if (M_TABS.some(t => t.id === tab)) ui.tab = tab;
+  if (st) { const i = state.stations.findIndex(s => s.id === st); if (i >= 0) { ui.station = i; ui.tab = "stations"; } }
+}
+window.addEventListener("hashchange", () => { applyHash(); render(); });
+
+loadState();
+applyHash();
+render();
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
